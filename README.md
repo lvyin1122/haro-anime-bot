@@ -61,15 +61,20 @@ hardlink probe should pass before you subscribe to anything.
 
 Building the web bundle on-device takes roughly 4 minutes on a 4GB Pi 4B and needs about 1.5GB
 free. That is fine on 4GB and 8GB boards. On a 1GB or 2GB Pi, skip the build entirely and pull the
-prebuilt multi-arch image instead — comment out `build:` in `docker-compose.yml` and uncomment the
-`image: ghcr.io/OWNER/...` line, then:
+prebuilt `linux/arm64` image instead — comment out `build:` in `docker-compose.yml`, uncomment the
+`image: ghcr.io/...` line, then:
 
 ```bash
+# The package inherits the repo's private visibility, so authenticate first.
+# Create a token at github.com/settings/tokens with the read:packages scope.
+echo "$GHCR_TOKEN" | docker login ghcr.io -u heyuwang1999 --password-stdin
+
 docker compose pull && docker compose up -d
 ```
 
 The image is published for `linux/amd64` and `linux/arm64` by `.github/workflows/docker.yml` on
-every push to `main`.
+every push to `main`. Make the package public in its GitHub settings if you would rather skip the
+`docker login` step.
 
 At runtime Haro is light — the container is capped at 768MB with a 512MB Node heap, well above what
 it uses. A few other things are tuned for SD cards specifically: SQLite runs in WAL mode with

@@ -19,7 +19,7 @@ services:
     # pull the multi-arch image published by .github/workflows/docker.yml.
     build: .
     image: haro-anime-bot:latest
-    # image: ghcr.io/OWNER/haro-anime-bot:latest
+    # image: ghcr.io/heyuwang1999/haro-anime-bot:latest
     container_name: haro
     restart: unless-stopped
     ports:
