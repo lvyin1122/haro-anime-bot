@@ -1,0 +1,8 @@
+packages:
+  - server
+  - web
+
+# esbuild's postinstall links the prebuilt platform binary (including
+# @esbuild/linux-arm64 for the Pi). Without this the server build cannot run.
+allowBuilds:
+  esbuild: true

@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-ink-950: oklch(0.16 0.012 275);
+  --color-ink-900: oklch(0.2 0.014 275);
+  --color-ink-800: oklch(0.26 0.016 275);
+  --color-ink-700: oklch(0.34 0.017 275);
+  --color-ink-500: oklch(0.58 0.015 275);
+  --color-ink-300: oklch(0.78 0.012 275);
+  --color-ink-100: oklch(0.94 0.006 275);
+  --color-brand: oklch(0.62 0.19 295);
+  --color-brand-soft: oklch(0.42 0.12 295);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-ink-950 text-ink-100 antialiased;
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans CJK SC',
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* Release titles are long, CJK-heavy and full of brackets; without this they
+   overflow their cards on narrow screens. */
+.break-title {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-ink-900);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-500);
+}

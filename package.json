@@ -1,0 +1,18 @@
+{
+  "name": "haro-anime-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Self-hosted anime subscription manager wiring AnimeGarden + Bangumi + qBittorrent + Jellyfin",
+  "engines": {
+    "node": ">=26"
+  },
+  "packageManager": "pnpm@11.10.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @haro/server --filter @haro/web dev",
+    "build": "pnpm --filter @haro/web build && pnpm --filter @haro/server build",
+    "start": "pnpm --filter @haro/server start",
+    "test": "pnpm --filter ./server test",
+    "typecheck": "pnpm --recursive typecheck"
+  }
+}

@@ -1,0 +1,38 @@
+# Development stack: source is bind-mounted, server restarts on change, Vite
+# serves the UI with HMR on :5173 and proxies /api to the server on :3000.
+#
+#   docker compose -f docker-compose.dev.yml up
+#   docker compose -f docker-compose.dev.yml run --rm haro-dev pnpm test
+#
+# Using this avoids needing Node 26 on your workstation — `anipar` cannot be
+# imported on Node 22, so tests and typechecks have to run on 26 somewhere.
+
+services:
+  haro-dev:
+    image: node:26-alpine
+    container_name: haro-dev
+    working_dir: /app
+    command: sh -c "npm install -g pnpm@11.10.0 && pnpm install && pnpm dev"
+    ports:
+      - '3000:3000' # API
+      - '5173:5173' # Vite dev server (open this one)
+    env_file: .env
+    environment:
+      NODE_ENV: development
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - .:/app
+      # Keep container-built node_modules out of the bind mount so the host's
+      # (possibly wrong-arch) installs never leak in.
+      - haro_root_modules:/app/node_modules
+      - haro_server_modules:/app/server/node_modules
+      - haro_web_modules:/app/web/node_modules
+      - ./data:/config
+      - /srv/downloads/complete:/downloads/complete
+      - /srv/media/anime:/media/anime
+
+volumes:
+  haro_root_modules:
+  haro_server_modules:
+  haro_web_modules:

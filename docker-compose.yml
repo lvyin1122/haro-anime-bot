@@ -1,0 +1,62 @@
+# Haro — runs alongside your existing qBittorrent and Jellyfin containers.
+#
+# Before first `docker compose up -d --build`, check the two prerequisites that
+# cause almost every setup failure:
+#
+#   1. Same filesystem (hardlinks cannot cross devices):
+#        stat -c %d /srv/downloads/complete /srv/media/anime
+#      Both numbers must match.
+#
+#   2. Matching ownership — use qBittorrent's PUID:PGID for `user:` below:
+#        docker exec qbittorrent id
+#
+# Adjust the host paths under `volumes:` to your actual layout.
+
+services:
+  haro:
+    # Builds on the Pi: ~4 min on a 4GB Pi 4B, and needs roughly 1.5GB free.
+    # To skip that, comment `build:` out and uncomment the `image:` line to
+    # pull the multi-arch image published by .github/workflows/docker.yml.
+    build: .
+    image: haro-anime-bot:latest
+    # image: ghcr.io/OWNER/haro-anime-bot:latest
+    container_name: haro
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file: .env
+
+    # Must match qBittorrent's PUID/PGID: we create hardlinks inside its
+    # completed-downloads tree, and Jellyfin has to be able to read the result.
+    user: '1000:1000'
+
+    # host.docker.internal does not resolve on Linux (unlike Docker Desktop)
+    # without this line — every qBittorrent and Jellyfin call would ENOTFOUND.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+    volumes:
+      # SQLite database + cached Bangumi artwork.
+      - ./data:/config
+      # These two MUST live on the same host filesystem.
+      - /srv/downloads/complete:/downloads/complete
+      - /srv/media/anime:/media/anime
+
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health/live']
+      interval: 30s
+      timeout: 10s
+      # A cold Pi 4B booting from SD needs well over 15s to answer.
+      start_period: 60s
+      retries: 3
+
+    # Keeps Haro from crowding out Jellyfin if something ever runs away.
+    mem_limit: 768m
+    memswap_limit: 768m
+
+    # Log rotation matters on an SD card.
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'

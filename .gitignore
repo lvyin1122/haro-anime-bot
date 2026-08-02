@@ -1,0 +1,13 @@
+node_modules/
+dist/
+data/
+.env
+*.log
+.DS_Store
+.vite/
+coverage/
+
+# Read-only upstream checkout kept for API reference. Not part of the build
+# (see .dockerignore) and not ours to redistribute — clone it separately with
+#   git clone https://github.com/yjl9903/AnimeGarden
+AnimeGarden/

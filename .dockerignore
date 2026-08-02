@@ -1,0 +1,13 @@
+# Reference checkout of upstream AnimeGarden — never needed in the image.
+AnimeGarden/
+
+node_modules/
+**/node_modules/
+**/dist/
+data/
+.env
+.git/
+.github/
+*.log
+coverage/
+.vite/
