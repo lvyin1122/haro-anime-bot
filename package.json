@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Self-hosted anime subscription manager wiring AnimeGarden + Bangumi + qBittorrent + Jellyfin",
+  "description": "Self-hosted anime subscription manager: AnimeGarden + Bangumi + qBittorrent, with a built-in video player. Runs anywhere Docker does.",
   "engines": {
     "node": ">=26"
   },

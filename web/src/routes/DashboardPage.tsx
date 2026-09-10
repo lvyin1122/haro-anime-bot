@@ -178,7 +178,7 @@ export function DashboardPage() {
             />
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {active.slice(0, 8).map((download) => (
               <DownloadRow
                 key={download.id}
@@ -209,7 +209,7 @@ export function DashboardPage() {
             />
           )}
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {list.slice(0, 8).map((subscription) => (
               <SubscriptionRow
                 key={subscription.id}
@@ -230,7 +230,7 @@ export function DashboardPage() {
 
 function DownloadRow({ download, poster }: { download: Download; poster?: string }) {
   return (
-    <Card className="py-2.5">
+    <Card className="py-3">
       <div className="flex gap-3">
         <Poster src={poster} alt="" className="h-16 w-11 shrink-0" />
         <div className="min-w-0 flex-1">
@@ -265,13 +265,13 @@ function SubscriptionRow({
   const t = useT();
   return (
     <Link to="/subscriptions/$id" params={{ id: String(subscription.id) }}>
-      <Card className="py-2.5 transition hover:border-ink-500">
+      <Card className="py-3 transition hover:border-ink-500">
         <div className="flex gap-3">
           <Poster src={subscription.poster} alt="" className="h-16 w-11 shrink-0" />
           <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">{subscription.title}</div>
-              <div className="mt-0.5 text-[11px] text-ink-500">
+              <div className="mt-1 text-[11px] leading-relaxed text-ink-500">
                 {checked}
                 {subscription.filter.fansubs?.length
                   ? ` · ${subscription.filter.fansubs.join(', ')}`

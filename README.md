@@ -1,11 +1,14 @@
 # Haro
 
+**English** · [简体中文](README.zh-CN.md)
+
 Self-hosted anime subscription manager. Browse and search anime, read the details from Bangumi,
 subscribe to a series, and have new episodes downloaded through qBittorrent and filed away with
 correct metadata — without touching a magnet link by hand. Then watch them, either in Haro's own
 player or in Jellyfin.
 
-Runs as a single Docker container.
+Runs as a single Docker container on anything Docker runs on — a NAS, a home server, a VPS, a
+spare laptop, a Raspberry Pi. amd64 and arm64 images are both published.
 
 ## Quick start
 
@@ -27,7 +30,83 @@ something to press Play on. Then open **<http://localhost:7803>**.
 Re-running is safe: it reports what already exists rather than replacing it. It never overwrites an
 `.env` you have edited — it tells you which keys differ and leaves the file alone.
 
-Deploying to a Raspberry Pi is a different path; see [Deploying to a Pi](#deploying-to-a-pi).
+Deploying somewhere permanent is a different path; see [Deploying](#deploying).
+
+## Running it on your own computer
+
+You do not need to be a developer to run Haro, but you do need to type a few commands. Here is the
+whole thing, assuming you have never used a terminal before.
+
+**What you need:** a computer you can leave switched on while things download, about 2GB of free
+memory, and space for the videos. Nothing else.
+
+### 1. Install Docker Desktop
+
+Docker is what actually runs Haro. Get it from
+[docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) and install
+it like any other app.
+
+- **Windows** — during setup it will offer to install WSL2. Say yes; it is required.
+- **macOS** — pick the download that matches your chip (Apple Silicon or Intel).
+- **Linux** — you can skip this. The script in step 3 installs Docker for you.
+
+Open Docker Desktop once after installing and wait until it says it is running. Leave it running.
+
+### 2. Get the code
+
+If you were sent a link to this repository, open it in a browser, click the green **Code** button
+and choose **Download ZIP**. Unzip it somewhere you will remember — your Downloads folder is fine.
+
+(If you know `git`, `git clone` the repository instead. It is the same thing.)
+
+### 3. Open a terminal in that folder
+
+- **Windows** — open **Ubuntu** from the Start menu (Docker Desktop installed it). Then type
+  `cd /mnt/c/Users/YOURNAME/Downloads/haro-anime-bot` — replacing `YOURNAME` — and press Enter.
+- **macOS** — open **Terminal** from Applications → Utilities. Type `cd ` (with a space), then drag
+  the unzipped folder onto the Terminal window, and press Enter.
+- **Linux** — right-click the folder and choose **Open in Terminal**, if your desktop offers it.
+
+### 4. Run one command
+
+```bash
+bash scripts/bootstrap.sh
+```
+
+It will print a list of green ✓ marks as it goes. On Linux it may ask for your password once, to
+install Docker — that is expected, and it will tell you to run the command a second time afterwards.
+
+The first run takes a few minutes because it downloads Docker images. When it finishes it prints
+the addresses to open.
+
+### 5. Open it
+
+Go to **<http://localhost:7803>** in your browser and bookmark it. That is Haro.
+
+Check the **Settings** page first — everything in the service list should be green. If something is
+red, the text next to it says what is wrong.
+
+### Living with it
+
+- **Where do the videos go?** Into Docker's own storage, which the **Settings** page shows the paths
+  for. If you would rather they went to a specific folder or an external drive, that is the
+  `LIBRARY_ROOT` setting under [Configuration](#configuration) — worth asking someone technical to
+  set up once.
+- **Does it need to stay open?** The browser tab does not, but the computer and Docker Desktop do.
+  Downloads stop when the computer sleeps and resume when it wakes.
+- **Starting and stopping.** Docker Desktop's **Containers** tab lists `haro-dev` and
+  `haro-qbittorrent` with start and stop buttons. Or re-run `bash scripts/bootstrap.sh` to bring
+  everything back up.
+- **After a reboot.** Start Docker Desktop, and the containers come back on their own.
+- **Something looks stuck.** The **Settings** page has an activity log at the bottom. The
+  **Downloads** page has a "Sync with qBittorrent" button that forces a refresh.
+- **Language.** Haro picks English or Chinese from your browser on first open. Change it under
+  **Settings** → **Language**.
+
+One thing worth being clear about: Haro downloads over BitTorrent, which means you also upload to
+other people while a torrent is active. What you are allowed to download and share is your own
+responsibility and depends on where you live.
+
 
 ## What it does
 
@@ -67,7 +146,7 @@ takes one of three routes, and the player tells you which:
 | --- | --- |
 | **Direct play** | Already an MP4 of streams your browser handles. Served as-is; ffmpeg never runs. |
 | **Repackaging** | Streams are fine, the container is not. `-c copy` into fMP4 — essentially free. |
-| **Transcoding** | Something has to be re-encoded. Expensive, and slow on a Pi. |
+| **Transcoding** | Something has to be re-encoded. Expensive, and slow on low-powered hardware. |
 
 Which route a file takes depends on your browser as much as the file: your browser is asked what it
 can decode (`MediaSource.isTypeSupported`) and the answer is sent with the request, so Safari on a
@@ -112,7 +191,7 @@ serves the UI from source and proxies `/api` to 7802. Opening 7802 in a browser 
 production there is no Vite and no redirect — 7802 serves the built UI and the API together, and
 is the only port `docker-compose.yml` publishes.
 
-## Deploying to a Pi
+## Deploying
 
 `bootstrap.sh` sets up a development machine. A real deployment uses `docker-compose.yml`, which
 expects qBittorrent and Jellyfin to already exist on the host and mounts real host directories:
@@ -130,28 +209,26 @@ docker compose up -d --build
 RAM, Docker, that both media paths are on one filesystem (with a real hardlink test), whether
 `user:` matches qBittorrent's PUID/PGID, and service reachability. Fix anything it marks ✗ first.
 
-Then open `http://<pi>:7802` and check **Settings** — every service should be green and the
+Then open `http://<host>:7802` and check **Settings** — every service should be green and the
 hardlink probe should pass before you subscribe to anything.
 
 ### Requirements
 
-- A Raspberry Pi 4B (or any arm64/amd64 host) running a **64-bit OS** with Docker and Docker Compose
+- Any **amd64 or arm64** host running a 64-bit OS, with Docker and Docker Compose
 - qBittorrent with its Web UI enabled
 - Downloads and the library on the **same filesystem** — hardlinks cannot cross devices
 
-> **64-bit is not optional.** `uname -m` must print `aarch64`. The Node 26 base image publishes no
-> 32-bit ARM build, so Haro cannot run on 32-bit Raspberry Pi OS. A Pi 4B supports 64-bit; older
-> installs often still run the 32-bit image.
+Roughly 1.5GB of free memory to build the image, or none if you pull the prebuilt one. At runtime
+Haro is light: the container is capped at 768MB with a 512MB Node heap, comfortably above what it
+uses. Transcoding is the exception — see [Watching](#watching).
 
-Building the web bundle on-device takes roughly 4 minutes on a 4GB Pi 4B and needs about 1.5GB
-free. That is fine on 4GB and 8GB boards. On a 1GB or 2GB Pi, skip the build entirely and pull the
-prebuilt `linux/arm64` image instead — comment out `build:` in `docker-compose.yml`, uncomment the
-`image: ghcr.io/...` line, then:
+To skip the build and pull the prebuilt image instead, comment out `build:` in
+`docker-compose.yml`, uncomment the `image: ghcr.io/...` line, then:
 
 ```bash
 # The package inherits the repo's private visibility, so authenticate first.
 # Create a token at github.com/settings/tokens with the read:packages scope.
-echo "$GHCR_TOKEN" | docker login ghcr.io -u heyuwang1999 --password-stdin
+echo "$GHCR_TOKEN" | docker login ghcr.io -u lvyin1122 --password-stdin
 
 docker compose pull && docker compose up -d
 ```
@@ -160,13 +237,22 @@ The image is published for `linux/amd64` and `linux/arm64` by `.github/workflows
 every push to `main`. Make the package public in its GitHub settings if you would rather skip the
 `docker login` step.
 
-At runtime Haro is light — the container is capped at 768MB with a 512MB Node heap, well above what
-it uses. A few other things are tuned for SD cards specifically: SQLite runs in WAL mode with
-`synchronous=NORMAL`, the activity log self-trims, and Docker logs rotate at 10MB × 3.
+### Running on a Raspberry Pi
 
-**Transcoding is the exception.** Re-encoding 1080p in software is beyond a Pi 4B in real time. If
-you watch on a Pi-hosted instance, prefer releases your browser can decode — or use Jellyfin, which
-can reach the Pi's hardware decoder in ways a container-internal ffmpeg cannot.
+A Pi 4B works and was what Haro was first built for, with three caveats.
+
+**64-bit is not optional.** `uname -m` must print `aarch64`. The Node 26 base image publishes no
+32-bit ARM build. A Pi 4B supports 64-bit; older installs often still run the 32-bit image.
+
+**Building on-device takes about 4 minutes on a 4GB Pi 4B** and needs roughly 1.5GB free. Fine on
+4GB and 8GB boards; on a 1GB or 2GB Pi, pull the prebuilt `linux/arm64` image instead.
+
+**Transcoding is beyond it.** Re-encoding 1080p in software is not real-time on a Pi 4B. Prefer
+releases your browser can decode directly, or use Jellyfin, which can reach the Pi's hardware
+decoder in ways a container-internal ffmpeg cannot.
+
+Some things are tuned for SD cards specifically and cost nothing elsewhere: SQLite runs in WAL mode
+with `synchronous=NORMAL`, the activity log self-trims, and Docker logs rotate at 10MB × 3.
 
 ### The four things that break first-run setups
 
@@ -200,7 +286,8 @@ exist separately for setups where the two containers mount the same directory at
 The Jellyfin pair splits for the same reason: `host.docker.internal:8096` is meaningful inside the
 container but resolves nowhere in a browser, so it cannot appear in a link. Leave
 `JELLYFIN_PUBLIC_URL` empty and the UI assumes Jellyfin is on the host you opened Haro from at port
-8096 — correct for a single Pi. Set it when Jellyfin lives elsewhere or behind a domain.
+8096 — correct when both run on one machine. Set it when Jellyfin lives elsewhere or behind a
+domain.
 
 ## Development
 
