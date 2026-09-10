@@ -13,7 +13,7 @@ spare laptop, a Raspberry Pi. amd64 and arm64 images are both published.
 ## Quick start
 
 ```bash
-git clone <this repo> && cd haro-anime-bot
+git clone https://github.com/lvyin1122/haro-anime-bot.git && cd haro-anime-bot
 ./scripts/bootstrap.sh
 ```
 
@@ -54,10 +54,11 @@ Open Docker Desktop once after installing and wait until it says it is running. 
 
 ### 2. Get the code
 
-If you were sent a link to this repository, open it in a browser, click the green **Code** button
-and choose **Download ZIP**. Unzip it somewhere you will remember — your Downloads folder is fine.
+Open <https://github.com/lvyin1122/haro-anime-bot> in a browser, click the green **Code**
+button and choose **Download ZIP**. Unzip it somewhere you will remember — your Downloads folder
+is fine.
 
-(If you know `git`, `git clone` the repository instead. It is the same thing.)
+(If you know `git`, clone it instead. It is the same thing.)
 
 ### 3. Open a terminal in that folder
 
@@ -226,16 +227,11 @@ To skip the build and pull the prebuilt image instead, comment out `build:` in
 `docker-compose.yml`, uncomment the `image: ghcr.io/...` line, then:
 
 ```bash
-# The package inherits the repo's private visibility, so authenticate first.
-# Create a token at github.com/settings/tokens with the read:packages scope.
-echo "$GHCR_TOKEN" | docker login ghcr.io -u lvyin1122 --password-stdin
-
 docker compose pull && docker compose up -d
 ```
 
-The image is published for `linux/amd64` and `linux/arm64` by `.github/workflows/docker.yml` on
-every push to `main`. Make the package public in its GitHub settings if you would rather skip the
-`docker login` step.
+The image is public, so that needs no login. It is published for `linux/amd64` and `linux/arm64`
+by `.github/workflows/docker.yml` on every push to `main`.
 
 ### Running on a Raspberry Pi
 

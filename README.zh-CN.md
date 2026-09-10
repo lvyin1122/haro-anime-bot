@@ -12,7 +12,7 @@ amd64 与 arm64 镜像均有发布。
 ## 快速开始
 
 ```bash
-git clone <本仓库> && cd haro-anime-bot
+git clone https://github.com/lvyin1122/haro-anime-bot.git && cd haro-anime-bot
 ./scripts/bootstrap.sh
 ```
 
@@ -51,10 +51,10 @@ git clone <本仓库> && cd haro-anime-bot
 
 ### 2. 获取代码
 
-如果别人给了你这个仓库的链接，在浏览器里打开它，点绿色的 **Code** 按钮，选 **Download ZIP**。
+在浏览器里打开 <https://github.com/lvyin1122/haro-anime-bot>，点绿色的 **Code** 按钮，选 **Download ZIP**。
 解压到一个你记得住的位置，放在「下载」文件夹里就行。
 
-（如果你会用 `git`，直接 `git clone` 也一样。）
+（如果你会用 `git`，直接 `git clone https://github.com/lvyin1122/haro-anime-bot.git` 也一样。）
 
 ### 3. 在那个文件夹里打开终端
 
@@ -210,15 +210,11 @@ docker compose up -d --build
 `image: ghcr.io/...` 那一行，然后：
 
 ```bash
-# 该软件包继承仓库的私有可见性，所以需要先认证。
-# 在 github.com/settings/tokens 创建一个带 read:packages 权限的 token。
-echo "$GHCR_TOKEN" | docker login ghcr.io -u lvyin1122 --password-stdin
-
 docker compose pull && docker compose up -d
 ```
 
-镜像由 `.github/workflows/docker.yml` 在每次推送到 `main` 时构建并发布 `linux/amd64` 与
-`linux/arm64` 两个架构。如果你不想每次都 `docker login`，可以在 GitHub 上把该软件包设为公开。
+镜像是公开的，不需要登录。它由 `.github/workflows/docker.yml` 在每次推送到 `main` 时构建，
+并发布 `linux/amd64` 与 `linux/arm64` 两个架构。
 
 ### 在树莓派上运行
 
