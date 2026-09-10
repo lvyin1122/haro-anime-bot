@@ -50,7 +50,6 @@ HARO_PORT=7802
 VITE_PORT=7803
 QB_PORT=7808
 JF_PORT=8096
-QB_PASSWORD='haro-dev'
 
 # ---------------------------------------------------------------------------
 head_ "Platform"
@@ -197,6 +196,15 @@ head_ "Configuration"
 HARO_UID=$(id -u)
 HARO_GID=$(id -g)
 
+# qBittorrent's WebUI password is generated once and then lives in .env. It is
+# deliberately not a constant in this script: it protects a WebUI that can add
+# torrents and write to disk, and a password published in a repository is one
+# port-mapping change away from being a real problem.
+QB_PASSWORD=$(sed -n 's/^QBITTORRENT_PASSWORD=//p' .env 2>/dev/null | head -1)
+case "$QB_PASSWORD" in
+  ''|changeme) QB_PASSWORD=$(python3 -c 'import secrets; print(secrets.token_urlsafe(12))') ;;
+esac
+
 # Every key bootstrap owns, and the value the dev stack needs.
 dev_value() {
   case "$1" in
@@ -260,6 +268,15 @@ QB_CONF=data/qbittorrent/qBittorrent/qBittorrent.conf
 if [ -f "$QB_CONF" ]; then
   ok "qBittorrent config already seeded"
 else
+  # PBKDF2-HMAC-SHA512, 100k iterations, 64-byte key, 16-byte salt — the format
+  # qBittorrent stores and the only one it will accept.
+  QB_HASH=$(python3 - "$QB_PASSWORD" <<'PYHASH'
+import base64, hashlib, os, sys
+salt = os.urandom(16)
+key = hashlib.pbkdf2_hmac('sha512', sys.argv[1].encode(), salt, 100_000, 64)
+print(f'@ByteArray({base64.b64encode(salt).decode()}:{base64.b64encode(key).decode()})')
+PYHASH
+  )
   # Recent qBittorrent generates a random admin password on first run and only
   # prints it to the container log. Seeding the config avoids that entirely.
   cat > "$QB_CONF" <<'QBCONF'
@@ -279,8 +296,11 @@ WebUI\Username=admin
 WebUI\LocalHostAuth=false
 WebUI\CSRFProtection=false
 WebUI\HostHeaderValidation=false
-WebUI\Password_PBKDF2="@ByteArray(PVGquLK7J3f29LXM6ghq7A==:DfO+5vw4h9pfrIDKdHCcDi3nBi/igGjsplsHR877m2uFCcpWd2KRqZxc/iY8rQIKLMJuyDOyurj3ULCIjSNWjg==)"
+WebUI\Password_PBKDF2="__QB_HASH__"
 QBCONF
+  # The hash goes in afterwards: the heredoc above is quoted so that the
+  # backslashes in qBittorrent's own key names survive verbatim.
+  sed -i "s|__QB_HASH__|$QB_HASH|" "$QB_CONF"
   ok "qBittorrent seeded — admin / $QB_PASSWORD on :$QB_PORT"
 fi
 

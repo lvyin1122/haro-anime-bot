@@ -181,7 +181,7 @@ Everything is on 78xx, deliberately clear of the 3000s.
 | --- | --- |
 | **7803** | The UI in development (Vite, hot reload) — **open this one** |
 | **7802** | The API in development; the whole app in production |
-| **7808** | qBittorrent's Web UI (dev stack; `admin` / `haro-dev`) |
+| **7808** | qBittorrent's Web UI (dev stack; `admin`, password generated on first run) |
 | 8096 | Jellyfin, if you started it |
 
 All configurable: `PORT` in `.env` for Haro, and the port mappings in the compose file for the rest.

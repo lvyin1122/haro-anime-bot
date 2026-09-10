@@ -166,7 +166,7 @@ Jellyfin 需要一个指向你番剧目录的 **Shows** 媒体库，并为它启
 | --- | --- |
 | **7803** | 开发模式下的界面（Vite，热更新）—— **打开这个** |
 | **7802** | 开发模式下的 API；生产模式下的整个应用 |
-| **7808** | qBittorrent 的 Web UI（开发栈；`admin` / `haro-dev`） |
+| **7808** | qBittorrent 的 Web UI（开发栈；用户名 `admin`，密码在首次运行时生成） |
 | 8096 | Jellyfin，如果你启动了它 |
 
 都可配置：Haro 的端口在 `.env` 的 `PORT`，其余在 compose 文件的端口映射里。

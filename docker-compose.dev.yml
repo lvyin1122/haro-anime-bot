@@ -95,8 +95,9 @@ services:
       - '6881:6881'
       - '6881:6881/udp'
     volumes:
-      # Seeded by scripts/bootstrap.sh with a known WebUI password and port,
-      # so there is no random first-run password to dig out of the logs.
+      # Seeded by scripts/bootstrap.sh with a generated WebUI password and the
+      # right port, so there is no random first-run password to dig out of the
+      # container's logs. The password it generated is in .env.
       - ./data/qbittorrent:/config
       - haro_data:/data
     restart: unless-stopped
