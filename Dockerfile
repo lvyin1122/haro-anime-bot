@@ -27,6 +27,14 @@ ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH \
     HOME=/tmp \
     npm_config_store_dir=/pnpm/store \
+    # pnpm prompts before replacing a node_modules it considers stale, and
+    # refuses outright when there is no TTY to prompt on — which is every
+    # container start. One interrupted install is enough to trigger it, and the
+    # service then never starts again. CI=true is what actually suppresses it;
+    # the npm_config_confirm_modules_purge setting is ignored from the
+    # environment. The install below opts back out of the frozen lockfile CI
+    # would otherwise imply, so editing a package.json here still works.
+    CI=true \
     NODE_ENV=development
 RUN npm install -g pnpm@11.10.0
 
@@ -38,7 +46,7 @@ COPY pnpm-lock.yaml ./
 RUN pnpm fetch || true
 RUN chmod -R 0777 /pnpm
 
-CMD ["sh", "-c", "pnpm install --prefer-offline && pnpm dev"]
+CMD ["sh", "-c", "pnpm install --prefer-offline --no-frozen-lockfile && pnpm dev"]
 
 # --- build -----------------------------------------------------------------
 FROM node:26-alpine AS build

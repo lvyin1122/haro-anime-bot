@@ -518,6 +518,13 @@ function videoCodecArgs(plan: PlayPlan, encoder: string): string[] {
     ...(ENCODER_ARGS[encoder] ?? ['-b:v', '4M']),
     '-pix_fmt',
     'yuv420p',
+    // No B-frames. Their reorder delay pushes the first presentable frame of
+    // every segment ~2 frames past where the playlist says the segment starts,
+    // which in segmented output is a hole at every join rather than a harmless
+    // offset. Costs some compression; buys gapless playback, and cheaper
+    // encoding on hardware that needs the help.
+    '-bf',
+    '0',
     // Each segment is encoded from scratch, so its first frame is already an
     // IDR; this only stops the encoder inserting more than it needs to inside
     // one.

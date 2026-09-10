@@ -201,6 +201,11 @@ HARO_GID=$(id -g)
 dev_value() {
   case "$1" in
     PORT)                 echo "$HARO_PORT" ;;
+    # One volume, two directories: a hardlink cannot cross a filesystem, and
+    # two named volumes would be two filesystems. See docker-compose.dev.yml.
+    DOWNLOAD_ROOT)        echo "/data/downloads" ;;
+    LIBRARY_ROOT)         echo "/data/library" ;;
+    QB_DOWNLOAD_ROOT)     echo "/data/downloads" ;;
     QBITTORRENT_URL)      echo "http://qbittorrent:$QB_PORT" ;;
     QBITTORRENT_USERNAME) echo "admin" ;;
     QBITTORRENT_PASSWORD) echo "$QB_PASSWORD" ;;
@@ -210,7 +215,7 @@ dev_value() {
     HARO_GID)             echo "$HARO_GID" ;;
   esac
 }
-DEV_KEYS="PORT QBITTORRENT_URL QBITTORRENT_USERNAME QBITTORRENT_PASSWORD JELLYFIN_URL PLAYER_MODE HARO_UID HARO_GID"
+DEV_KEYS="PORT DOWNLOAD_ROOT LIBRARY_ROOT QB_DOWNLOAD_ROOT QBITTORRENT_URL QBITTORRENT_USERNAME QBITTORRENT_PASSWORD JELLYFIN_URL PLAYER_MODE HARO_UID HARO_GID"
 
 set_key() { # set_key FILE KEY VALUE
   if grep -qE "^$2=" "$1"; then
@@ -262,11 +267,11 @@ else
 FileLogger\Enabled=true
 
 [BitTorrent]
-Session\DefaultSavePath=/downloads/complete
+Session\DefaultSavePath=/data/downloads
 Session\TempPathEnabled=false
 
 [Preferences]
-Downloads\SavePath=/downloads/complete
+Downloads\SavePath=/data/downloads
 General\Locale=en
 WebUI\Address=*
 WebUI\Port=7808

@@ -197,8 +197,18 @@ async function main(): Promise<void> {
 
   const existing = subscriptions.list().find((s) => s.title === TITLE);
   if (existing) {
-    console.log(`Sample subscription #${existing.id} already exists — nothing to do.`);
-    return;
+    // A run that failed partway leaves the subscription behind with nothing
+    // under it, and reporting that as "already seeded" would strand the stack
+    // with an empty library and no obvious way forward.
+    const complete = downloads
+      .list({ subscriptionId: existing.id, status: ['imported'] })
+      .length >= SAMPLES.length;
+    if (complete) {
+      console.log(`Sample subscription #${existing.id} already exists — nothing to do.`);
+      return;
+    }
+    console.log(`Clearing an incomplete sample subscription #${existing.id} and starting over.`);
+    subscriptions.remove(existing.id);
   }
 
   console.log(`Generating ${SAMPLES.length} sample episodes with ffmpeg (~${DURATION}s each)…`);
@@ -283,4 +293,13 @@ async function main(): Promise<void> {
   console.log(`\nSeeded subscription #${subscription.id}. Open the Library tab and press Play.`);
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  // Leave nothing half-built: a stale subscription with no episodes under it
+  // would make the next run think the work was already done.
+  const partial = subscriptions.list().find((s) => s.title === TITLE);
+  if (partial) subscriptions.remove(partial.id);
+  console.error(`\nSeeding failed: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
