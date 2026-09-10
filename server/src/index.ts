@@ -48,16 +48,39 @@ app.notFound((c) =>
 
 // --- static SPA ------------------------------------------------------------
 
+/**
+ * Vite's port in development. Must match `server.port` in web/vite.config.ts,
+ * which pins it with `strictPort` so it cannot drift out from under this.
+ */
+const VITE_PORT = 7803;
+
 const webRoot = config.WEB_ROOT ?? join(process.cwd(), '..', 'web', 'dist');
 const indexHtml = join(webRoot, 'index.html');
-const hasWeb = existsSync(indexHtml);
+
+/**
+ * Production serves the built UI from this process, so there is one port and
+ * one server. Development does not: Vite owns the UI, with hot reload and the
+ * current source, and web/dist here is only ever whatever was last built.
+ *
+ * Serving that stale copy would answer this port with an app that looks right
+ * and silently ignores every edit you make — a genuinely expensive way to be
+ * confused. So in development the UI is not served at all from here, and a
+ * browser that lands on it is sent to Vite instead.
+ */
+const isDev = config.NODE_ENV === 'development';
+const hasWeb = !isDev && existsSync(indexHtml);
+
+/** The same path on the dev server, keeping the host so LAN access works. */
+function viteUrl(requestUrl: string, hostHeader: string | undefined): string {
+  const { pathname, search } = new URL(requestUrl);
+  const host = (hostHeader ?? 'localhost').replace(/:\d+$/, '');
+  return `http://${host}:${VITE_PORT}${pathname}${search}`;
+}
 
 async function serveIndex(c: Parameters<Parameters<Hono['notFound']>[0]>[0]) {
+  if (isDev) return c.redirect(viteUrl(c.req.url, c.req.header('host')), 302);
   if (!hasWeb) {
-    return c.text(
-      'UI bundle not found. Run `pnpm --filter ./web build`, or use the Vite dev server on :7803.',
-      404
-    );
+    return c.text('UI bundle not found. Run `pnpm --filter ./web build`.', 404);
   }
   return c.html(await readFile(indexHtml, 'utf8'));
 }
@@ -79,6 +102,6 @@ serve({ fetch: app.fetch, port: config.PORT, hostname: '0.0.0.0' }, (info) => {
   log.info('server', `haro listening on http://0.0.0.0:${info.port}`, {
     downloadRoot: config.DOWNLOAD_ROOT,
     libraryRoot: config.LIBRARY_ROOT,
-    ui: hasWeb ? 'bundled' : 'not built'
+    ui: isDev ? `Vite on :${VITE_PORT}` : hasWeb ? 'bundled' : 'not built'
   });
 });

@@ -100,11 +100,17 @@ Everything is on 78xx, deliberately clear of the 3000s.
 | Port | |
 | --- | --- |
 | **7803** | The UI in development (Vite, hot reload) — **open this one** |
-| **7802** | The API, and the whole app in production |
+| **7802** | The API in development; the whole app in production |
 | **7808** | qBittorrent's Web UI (dev stack; `admin` / `haro-dev`) |
 | 8096 | Jellyfin, if you started it |
 
 All configurable: `PORT` in `.env` for Haro, and the port mappings in the compose file for the rest.
+
+In development the two are separate servers, because Vite cannot hot-reload through Hono: 7803
+serves the UI from source and proxies `/api` to 7802. Opening 7802 in a browser redirects you to
+7803 rather than serving the last build, which would look right and quietly ignore every edit. In
+production there is no Vite and no redirect — 7802 serves the built UI and the API together, and
+is the only port `docker-compose.yml` publishes.
 
 ## Deploying to a Pi
 
