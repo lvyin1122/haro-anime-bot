@@ -15,7 +15,7 @@ const absPath = trimmed.refine((s) => s.startsWith('/'), {
 });
 
 const ConfigSchema = z.object({
-  PORT: z.coerce.number().int().positive().default(3000),
+  PORT: z.coerce.number().int().positive().default(7802),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
   WEB_ROOT: trimmed.optional(),
 
@@ -28,6 +28,16 @@ const ConfigSchema = z.object({
   QBITTORRENT_USERNAME: trimmed.default('admin'),
   QBITTORRENT_PASSWORD: z.string().default(''),
   QBITTORRENT_CATEGORY: trimmed.default('haro-anime'),
+
+  /**
+   * Where "Play" sends you.
+   *
+   * `builtin` uses Haro's own player: ffmpeg repackages (or, for codecs the
+   * browser cannot decode, re-encodes) on the fly and watched state is stored
+   * locally. `jellyfin` deep-links into the Jellyfin web client and reads
+   * watched state back from it. `auto` picks jellyfin when it is configured.
+   */
+  PLAYER_MODE: z.enum(['auto', 'builtin', 'jellyfin']).default('auto'),
 
   JELLYFIN_URL: baseUrl.default('http://host.docker.internal:8096'),
   JELLYFIN_API_KEY: z.string().default(''),
@@ -70,6 +80,17 @@ function load(): Config {
 
 export const config = load();
 
+/** `PLAYER_MODE` with `auto` resolved against whether Jellyfin is configured. */
+export function playerMode(c: Config = config): 'builtin' | 'jellyfin' {
+  if (c.PLAYER_MODE !== 'auto') return c.PLAYER_MODE;
+  return c.JELLYFIN_API_KEY && c.JELLYFIN_USER_ID ? 'jellyfin' : 'builtin';
+}
+
+/** Whether Jellyfin has enough configuration to be talked to at all. */
+export function jellyfinConfigured(c: Config = config): boolean {
+  return Boolean(c.JELLYFIN_API_KEY && c.JELLYFIN_USER_ID);
+}
+
 /**
  * Warnings worth surfacing at boot and on the settings page. These are all
  * survivable — the app starts and the UI explains what is unconfigured —
@@ -80,8 +101,10 @@ export function configWarnings(c: Config = config): string[] {
   if (!c.QBITTORRENT_PASSWORD) {
     warnings.push('QBITTORRENT_PASSWORD is empty — downloads will fail to enqueue.');
   }
-  if (!c.JELLYFIN_API_KEY) {
-    warnings.push('JELLYFIN_API_KEY is empty — library refresh after import is disabled.');
+  if (playerMode(c) === 'jellyfin' && !c.JELLYFIN_API_KEY) {
+    warnings.push(
+      'PLAYER_MODE is jellyfin but JELLYFIN_API_KEY is empty — set it, or use PLAYER_MODE=builtin.'
+    );
   }
   if (c.DOWNLOAD_ROOT === c.LIBRARY_ROOT) {
     warnings.push(

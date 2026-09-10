@@ -14,6 +14,15 @@ import {
 } from '../api';
 import { Badge, Button, Card, EmptyState, ErrorNote, Spinner } from './ui';
 
+/** "Resume" only once you are far enough in for it to be worth saying. */
+function isPartlyWatched(item: ReadyItem): boolean {
+  return (
+    item.playedPercentage !== undefined &&
+    item.playedPercentage > 1 &&
+    item.playedPercentage < 95
+  );
+}
+
 function PlayButton({
   item,
   data,
@@ -23,7 +32,38 @@ function PlayButton({
   data: ReadyResponse;
   size?: 'sm' | 'md';
 }) {
-  if (item.state !== 'ready' || !item.itemId) {
+  const label = isPartlyWatched(item) ? 'Resume' : 'Play';
+
+  if (item.state !== 'ready') {
+    return (
+      <Badge
+        tone="warn"
+        title={
+          data.playerMode === 'builtin'
+            ? 'The database has this episode, but the file is not where it was imported to.'
+            : 'The file is in your library; Jellyfin has not indexed it yet.'
+        }
+      >
+        <Clock className="mr-1 size-3" />
+        {data.playerMode === 'builtin' ? 'file missing' : 'pending scan'}
+      </Badge>
+    );
+  }
+
+  // The built-in player opens in the app; Jellyfin is a deep link out to it.
+  if (data.playerMode === 'builtin') {
+    if (item.fileId === undefined) return null;
+    return (
+      <Link to="/watch/$fileId" params={{ fileId: String(item.fileId) }}>
+        <Button variant="primary" size={size}>
+          <Play className="size-3.5" />
+          {label}
+        </Button>
+      </Link>
+    );
+  }
+
+  if (!item.itemId) {
     return (
       <Badge tone="warn" title="The file is in your library; Jellyfin has not indexed it yet.">
         <Clock className="mr-1 size-3" />
@@ -32,15 +72,11 @@ function PlayButton({
     );
   }
 
-  const href = jellyfinItemUrl(data.publicUrl, item.itemId, data.serverId);
-
   return (
-    <a href={href} target="_blank" rel="noreferrer">
+    <a href={jellyfinItemUrl(data.publicUrl, item.itemId, data.serverId)} target="_blank" rel="noreferrer">
       <Button variant="primary" size={size}>
         <Play className="size-3.5" />
-        {item.playedPercentage && item.playedPercentage > 1 && item.playedPercentage < 95
-          ? 'Resume'
-          : 'Play'}
+        {label}
       </Button>
     </a>
   );
@@ -57,7 +93,7 @@ export function ReadyRow({ item, data }: { item: ReadyItem; data: ReadyResponse 
               {formatEpisode(item.episode)}
             </Badge>
             {item.played ? (
-              <Badge tone="neutral" title="Already watched in Jellyfin">
+              <Badge tone="neutral" title="Already watched">
                 <CheckCircle2 className="mr-1 size-3" />
                 watched
               </Badge>
@@ -89,16 +125,14 @@ export function ReadyRow({ item, data }: { item: ReadyItem; data: ReadyResponse 
             <div className="truncate text-[11px] text-ink-500">{item.episodeTitle}</div>
           )}
 
-          {item.playedPercentage !== undefined &&
-            item.playedPercentage > 1 &&
-            item.playedPercentage < 95 && (
-              <div className="mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-ink-800">
-                <div
-                  className="h-full rounded-full bg-brand"
-                  style={{ width: `${item.playedPercentage}%` }}
-                />
-              </div>
-            )}
+          {isPartlyWatched(item) && (
+            <div className="mt-1.5 h-1 w-40 overflow-hidden rounded-full bg-ink-800">
+              <div
+                className="h-full rounded-full bg-brand"
+                style={{ width: `${item.playedPercentage}%` }}
+              />
+            </div>
+          )}
         </div>
 
         <PlayButton item={item} data={data} />
@@ -152,8 +186,15 @@ export function ReadyToWatch({
           <h2 className="text-sm font-semibold">Ready to watch</h2>
           {unwatched.length > 0 && <Badge tone="success">{unwatched.length} new</Badge>}
           {pending > 0 && (
-            <Badge tone="warn" title="Imported but not yet indexed by Jellyfin">
-              {pending} pending scan
+            <Badge
+              tone="warn"
+              title={
+                data.playerMode === 'builtin'
+                  ? 'Imported, but the file is no longer at the recorded path'
+                  : 'Imported but not yet indexed by Jellyfin'
+              }
+            >
+              {pending} {data.playerMode === 'builtin' ? 'missing' : 'pending scan'}
             </Badge>
           )}
         </div>
@@ -172,10 +213,14 @@ export function ReadyToWatch({
               See all →
             </Link>
           ) : (
-            <Button size="sm" onClick={() => rescan.mutate()} disabled={rescan.isPending}>
-              <RefreshCw className={clsx('size-3', rescan.isPending && 'animate-spin')} />
-              Rescan Jellyfin
-            </Button>
+            // Only Jellyfin needs telling that a file appeared; the built-in
+            // player reads the library directly.
+            data.playerMode === 'jellyfin' && (
+              <Button size="sm" onClick={() => rescan.mutate()} disabled={rescan.isPending}>
+                <RefreshCw className={clsx('size-3', rescan.isPending && 'animate-spin')} />
+                Rescan Jellyfin
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -188,10 +233,10 @@ export function ReadyToWatch({
 
       {data.error && <ErrorNote>{data.error}</ErrorNote>}
 
-      {!data.jellyfinConfigured && (
+      {data.playerMode === 'jellyfin' && !data.jellyfinConfigured && (
         <ErrorNote>
-          Set JELLYFIN_API_KEY and JELLYFIN_USER_ID to link imported episodes to Jellyfin. The files
-          are in your library either way.
+          Set JELLYFIN_API_KEY and JELLYFIN_USER_ID to link imported episodes to Jellyfin, or set
+          PLAYER_MODE=builtin to watch them here. The files are in your library either way.
         </ErrorNote>
       )}
 
@@ -200,7 +245,7 @@ export function ReadyToWatch({
           title={all.length === 0 ? 'Nothing in your library yet' : 'All caught up'}
           description={
             all.length === 0
-              ? 'Once a subscription downloads an episode and files it into Jellyfin, it shows up here with a play link.'
+              ? 'Once a subscription downloads an episode and files it into your library, it shows up here with a play button.'
               : 'Every downloaded episode has been watched.'
           }
         />

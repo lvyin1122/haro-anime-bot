@@ -113,7 +113,7 @@ export function SubscriptionsPage() {
                 {subscription.stats && (
                   <div className="text-right text-[11px] text-ink-500">
                     <div>
-                      <span className="text-emerald-400">{subscription.stats.imported}</span> in
+                      <span className="text-brand">{subscription.stats.imported}</span> in
                       library
                     </div>
                     {subscription.stats.active > 0 && (

@@ -13,6 +13,7 @@ import { discoverRoutes } from './routes/discover.ts';
 import { subscriptionRoutes } from './routes/subscriptions.ts';
 import { downloadRoutes } from './routes/downloads.ts';
 import { libraryRoutes } from './routes/library.ts';
+import { playRoutes } from './routes/play.ts';
 import { settingsRoutes } from './routes/settings.ts';
 import { startScheduler } from './core/scheduler.ts';
 
@@ -37,6 +38,7 @@ const api = new Hono()
   .route('/subscriptions', subscriptionRoutes)
   .route('/downloads', downloadRoutes)
   .route('/library', libraryRoutes)
+  .route('/play', playRoutes)
   .route('/settings', settingsRoutes);
 
 app.route('/api', api);
@@ -53,7 +55,7 @@ const hasWeb = existsSync(indexHtml);
 async function serveIndex(c: Parameters<Parameters<Hono['notFound']>[0]>[0]) {
   if (!hasWeb) {
     return c.text(
-      'UI bundle not found. Run `pnpm --filter ./web build`, or use the Vite dev server on :5173.',
+      'UI bundle not found. Run `pnpm --filter ./web build`, or use the Vite dev server on :7803.',
       404
     );
   }

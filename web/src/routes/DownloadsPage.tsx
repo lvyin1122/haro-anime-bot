@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import clsx from 'clsx';
-import { RefreshCw } from 'lucide-react';
+import { Play, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -8,10 +9,11 @@ import {
   formatEpisode,
   formatRelative,
   formatSize,
-  jellyfinItemUrl,
-  type DownloadStatus
+  playTarget,
+  type DownloadStatus,
+  type ReadyItem,
+  type ReadyResponse
 } from '../api';
-import { Play } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -22,6 +24,28 @@ import {
   Spinner,
   StatusBadge
 } from '../components/ui';
+
+/** Play button for a download row, in whichever mode this instance is in. */
+function PlayLink({ item, data }: { item?: ReadyItem; data?: ReadyResponse }) {
+  const target = item && data ? playTarget(data, item) : undefined;
+  if (!target) return null;
+
+  const button = (
+    <Button size="sm" variant="primary">
+      <Play className="size-3" /> Play
+    </Button>
+  );
+
+  return target.internal ? (
+    <Link to="/watch/$fileId" params={{ fileId: String(target.fileId) }}>
+      {button}
+    </Link>
+  ) : (
+    <a href={target.href} target="_blank" rel="noreferrer">
+      {button}
+    </a>
+  );
+}
 
 const FILTERS: Array<{ key: string; label: string; status?: DownloadStatus[] }> = [
   { key: 'all', label: 'All' },
@@ -43,12 +67,12 @@ export function DownloadsPage() {
     refetchInterval: 10_000
   });
 
-  // Lets an imported row offer a direct Play link into Jellyfin.
+  // Lets an imported row offer a Play button without leaving this page.
   const ready = useQuery({ queryKey: ['ready', 100], queryFn: () => api.ready(100) });
   const playable = new Map(
     (ready.data?.items ?? [])
-      .filter((item) => item.state === 'ready' && item.itemId)
-      .map((item) => [item.downloadId, item])
+      .filter((item) => item.state === 'ready')
+      .map((item) => [item.downloadId, item] as const)
   );
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['downloads'] });
@@ -171,21 +195,7 @@ export function DownloadsPage() {
               </div>
 
               <div className="flex shrink-0 flex-wrap gap-1.5">
-                {playable.has(download.id) && ready.data && (
-                  <a
-                    href={jellyfinItemUrl(
-                      ready.data.publicUrl,
-                      playable.get(download.id)!.itemId!,
-                      ready.data.serverId
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Button size="sm" variant="primary">
-                      <Play className="size-3" /> Play
-                    </Button>
-                  </a>
-                )}
+                <PlayLink item={playable.get(download.id)} data={ready.data} />
                 {download.status === 'failed' && (
                   <Button size="sm" onClick={() => retry.mutate(download.id)}>
                     Retry

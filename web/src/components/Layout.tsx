@@ -23,6 +23,33 @@ const NAV = [
   { to: '/settings', label: 'Settings', icon: SettingsIcon }
 ] as const;
 
+/**
+ * Haro: a green sphere with two lit eyes, a seam across the middle and ear
+ * panels that flip open. Kept identical to public/favicon.svg — the tab icon
+ * and the header mark being the same shape is most of what makes a small app
+ * feel like one thing.
+ */
+function HaroMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden className={className}>
+      <rect x="-1" y="9.5" width="7" height="13" rx="3" fill="var(--color-brand-soft)" />
+      <rect x="26" y="9.5" width="7" height="13" rx="3" fill="var(--color-brand-soft)" />
+      <circle cx="16" cy="16" r="14" fill="var(--color-brand)" />
+      <path
+        d="M2.7 17.6h26.6"
+        stroke="var(--color-ink-950)"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
+      <circle cx="10.6" cy="12.2" r="3.7" fill="var(--color-ink-950)" />
+      <circle cx="21.4" cy="12.2" r="3.7" fill="var(--color-ink-950)" />
+      <circle cx="10.6" cy="12.2" r="1.9" fill="var(--color-eye)" />
+      <circle cx="21.4" cy="12.2" r="1.9" fill="var(--color-eye)" />
+    </svg>
+  );
+}
+
 export function Layout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
@@ -49,9 +76,7 @@ export function Layout() {
       <header className="sticky top-0 z-40 border-b border-ink-800 bg-ink-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
           <Link to="/" className="flex shrink-0 items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-lg bg-brand text-sm font-bold text-white">
-              H
-            </span>
+            <HaroMark className="size-7 shrink-0" />
             <span className="hidden text-sm font-semibold sm:block">Haro</span>
           </Link>
 
@@ -93,7 +118,7 @@ export function Layout() {
             <span
               className={clsx(
                 'size-2 rounded-full',
-                !health.data ? 'bg-ink-600' : degraded ? 'bg-amber-500' : 'bg-emerald-500'
+                !health.data ? 'bg-ink-600' : degraded ? 'bg-eye' : 'bg-brand'
               )}
             />
             <span className="hidden lg:block">

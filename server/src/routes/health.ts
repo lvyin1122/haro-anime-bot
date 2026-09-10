@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 
-import { config, configWarnings } from '../config.ts';
+import { config, configWarnings, playerMode } from '../config.ts';
 import * as animegarden from '../clients/animegarden.ts';
 import * as bangumi from '../clients/bangumi.ts';
 import * as jellyfin from '../clients/jellyfin.ts';
 import * as qbittorrent from '../clients/qbittorrent.ts';
+import { ffmpegVersion } from '../core/ffmpeg.ts';
 import { probeHardlink } from '../core/paths.ts';
 import { errorMessage } from '../log.ts';
 
@@ -28,22 +29,29 @@ export const healthRoutes = new Hono()
   .get('/live', (c) => c.json({ status: 'ok' }))
 
   .get('/', async (c) => {
-    const [qb, jf, ag, bgm, links] = await Promise.all([
+    const mode = playerMode();
+
+    const [qb, player, ag, bgm, links] = await Promise.all([
       check('qBittorrent', async () => `connected, version ${await qbittorrent.version()}`),
-      check('Jellyfin', async () => {
-        const info = await jellyfin.publicInfo();
-        if (!config.JELLYFIN_API_KEY) {
-          throw new Error(`reachable (${info.ServerName}) but JELLYFIN_API_KEY is not set`);
-        }
-        const folders = await jellyfin.getVirtualFolders();
-        const readiness = jellyfin.describeNfoReadiness(folders, config.LIBRARY_ROOT);
-        if (!readiness.library) {
-          return `connected to ${info.ServerName} ${info.Version}; no library covers ${config.LIBRARY_ROOT} yet`;
-        }
-        return `connected to ${info.ServerName} ${info.Version}; library "${readiness.library}"${
-          readiness.nfoEnabled ? '' : ' — WARNING: local NFO reader is disabled'
-        }`;
-      }),
+      // Whichever of the two is actually responsible for playback. Reporting
+      // an unconfigured Jellyfin as a failure would leave every built-in-player
+      // instance permanently degraded over a service it does not use.
+      mode === 'jellyfin'
+        ? check('Jellyfin', async () => {
+            const info = await jellyfin.publicInfo();
+            if (!config.JELLYFIN_API_KEY) {
+              throw new Error(`reachable (${info.ServerName}) but JELLYFIN_API_KEY is not set`);
+            }
+            const folders = await jellyfin.getVirtualFolders();
+            const readiness = jellyfin.describeNfoReadiness(folders, config.LIBRARY_ROOT);
+            if (!readiness.library) {
+              return `connected to ${info.ServerName} ${info.Version}; no library covers ${config.LIBRARY_ROOT} yet`;
+            }
+            return `connected to ${info.ServerName} ${info.Version}; library "${readiness.library}"${
+              readiness.nfoEnabled ? '' : ' — WARNING: local NFO reader is disabled'
+            }`;
+          })
+        : check('Player', async () => `built-in player, ffmpeg ${await ffmpegVersion()}`),
       check('AnimeGarden', async () => {
         if (!(await animegarden.ping())) throw new Error('API returned an error');
         return `reachable at ${config.ANIMEGARDEN_API}`;
@@ -55,12 +63,13 @@ export const healthRoutes = new Hono()
       probeHardlink()
     ]);
 
-    const services = [qb, jf, ag, bgm];
+    const services = [qb, player, ag, bgm];
     const ok = services.every((s) => s.ok) && links.ok;
 
     return c.json(
       {
         status: ok ? 'ok' : 'degraded',
+        playerMode: mode,
         services,
         paths: {
           downloadRoot: config.DOWNLOAD_ROOT,

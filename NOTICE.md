@@ -14,6 +14,8 @@ of them is copyleft:
 | [`hono`](https://hono.dev) | MIT | HTTP router |
 | [`zod`](https://zod.dev) | MIT | Environment and request validation |
 | [`react`](https://react.dev), [`@tanstack/*`](https://tanstack.com), [`tailwindcss`](https://tailwindcss.com), [`lucide-react`](https://lucide.dev) | MIT / ISC | Web UI |
+| [`hls.js`](https://github.com/video-dev/hls.js) | Apache-2.0 | Plays the segmented stream the built-in player produces |
+| [`jassub`](https://github.com/ThaUnknown/jassub) | MIT, wrapping [libass](https://github.com/libass/libass) (ISC) | Renders ASS/SSA subtitles in the browser |
 
 Because `@animegarden/client` is AGPL-3.0 and is combined into the distributed bundle, the combined
 work is licensed under the AGPL as well.
@@ -34,9 +36,16 @@ particular is a community-run service, so requests are throttled and responses c
 - **[Bangumi 番组计划](https://bgm.tv)** — anime metadata, episode lists, airing calendar and cover
   art. Fetched via its public API with a descriptive `User-Agent`, as its guidelines request.
 
-Cover art and synopses fetched from Bangumi and written into your Jellyfin library remain the
-property of their respective rights holders; they are cached locally for personal media
-organization.
+The runtime image also installs **ffmpeg** (LGPL-2.1-or-later as built by Alpine, with GPL-licensed
+components including x264 and x265). It is invoked as a separate program rather than linked, and is
+not modified or redistributed by this project beyond the distribution's own package.
+
+Cover art and synopses fetched from Bangumi and written into your library remain the property of
+their respective rights holders; they are cached locally for personal media organization.
+
+**Haro** is a character from *Mobile Suit Gundam*, owned by Sotsu and Sunrise. The name and the
+spherical green mark used in this interface are a fan homage; this project is not affiliated with,
+endorsed by, or licensed from either company.
 
 The `AnimeGarden/` directory, if present in a working copy, is a separate upstream checkout kept for
 API reference. It is excluded from version control and from the Docker build, and is not

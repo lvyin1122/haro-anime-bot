@@ -51,6 +51,7 @@ export function SettingsPage() {
 
   const config = settings.data?.config ?? {};
   const hardlink = health.data?.paths.hardlink;
+  const playerMode = health.data?.playerMode ?? 'builtin';
 
   return (
     <div className="space-y-5">
@@ -87,12 +88,17 @@ export function SettingsPage() {
             <Button size="sm" onClick={() => testQb.mutate()} disabled={testQb.isPending}>
               Test qBittorrent
             </Button>
-            <Button size="sm" onClick={() => testJf.mutate()} disabled={testJf.isPending}>
-              Test Jellyfin
-            </Button>
-            <Button size="sm" onClick={() => rescan.mutate()} disabled={rescan.isPending}>
-              Rescan Jellyfin library
-            </Button>
+            {/* Nothing to test or rescan when Jellyfin is not the player. */}
+            {playerMode === 'jellyfin' && (
+              <>
+                <Button size="sm" onClick={() => testJf.mutate()} disabled={testJf.isPending}>
+                  Test Jellyfin
+                </Button>
+                <Button size="sm" onClick={() => rescan.mutate()} disabled={rescan.isPending}>
+                  Rescan Jellyfin library
+                </Button>
+              </>
+            )}
           </div>
 
           {Object.entries(results).map(([key, result]) => (
@@ -128,7 +134,7 @@ export function SettingsPage() {
 
           <Row label="Downloads (this container)" value={String(config.downloadRoot ?? '—')} />
           <Row label="Downloads (qBittorrent)" value={String(config.qbDownloadRoot ?? '—')} />
-          <Row label="Jellyfin library" value={String(config.libraryRoot ?? '—')} />
+          <Row label="Library" value={String(config.libraryRoot ?? '—')} />
           <Row label="Data directory" value={String(config.dataDir ?? '—')} />
 
           {hardlink && !hardlink.sameDevice && (
@@ -147,16 +153,28 @@ export function SettingsPage() {
           <Row label="Username" value={String(config.qbittorrentUsername ?? '—')} />
           <Row label="Password" value={config.qbittorrentPasswordSet ? 'set' : 'not set'} />
           <Row label="Category" value={String(config.qbittorrentCategory ?? '—')} />
-          <Row label="Jellyfin (server-side)" value={String(config.jellyfinUrl ?? '—')} />
           <Row
-            label="Jellyfin (play links)"
+            label="Player"
             value={
-              config.jellyfinPublicUrl
-                ? String(config.jellyfinPublicUrl)
-                : `${window.location.protocol}//${window.location.hostname}:8096 (assumed)`
+              playerMode === 'builtin'
+                ? 'built-in (ffmpeg)'
+                : 'Jellyfin' + (config.playerMode === 'auto' ? ' (auto)' : '')
             }
           />
-          <Row label="API key" value={config.jellyfinApiKeySet ? 'set' : 'not set'} />
+          {playerMode === 'jellyfin' && (
+            <>
+              <Row label="Jellyfin (server-side)" value={String(config.jellyfinUrl ?? '—')} />
+              <Row
+                label="Jellyfin (play links)"
+                value={
+                  config.jellyfinPublicUrl
+                    ? String(config.jellyfinPublicUrl)
+                    : `${window.location.protocol}//${window.location.hostname}:8096 (assumed)`
+                }
+              />
+              <Row label="API key" value={config.jellyfinApiKeySet ? 'set' : 'not set'} />
+            </>
+          )}
           <Row label="AnimeGarden" value={String(config.animegardenApi ?? '—')} />
           <Row label="Bangumi" value={String(config.bangumiApi ?? '—')} />
           <Row label="Poll interval" value={`${config.pollIntervalMinutes ?? '—'} min`} />

@@ -3,17 +3,26 @@ import { join } from 'node:path';
 
 import * as jellyfin from '../clients/jellyfin.ts';
 import { getSubject, mainEpisodes } from '../clients/bangumi.ts';
-import { config } from '../config.ts';
-import { downloads, importedFiles, subscriptions, type Subscription } from '../data.ts';
+import { config, playerMode } from '../config.ts';
+import {
+  downloads,
+  importedFiles,
+  playbackProgress,
+  subscriptions,
+  type Subscription
+} from '../data.ts';
 import { seasonFolderName } from '../core/naming.ts';
+import { pathExists } from '../core/paths.ts';
 import { errorMessage } from '../log.ts';
 
 /**
  * Whether an imported episode is actually playable yet.
  *
- * `pending-scan` is the interesting one: the file is hardlinked and correct,
- * but Jellyfin has not indexed it. That is a normal transient state right
- * after an import, and the fix is a library scan rather than a re-download.
+ * What `ready` means depends on who is doing the playing. With the built-in
+ * player it means the file is on disk, which is all it needs. With Jellyfin it
+ * means Jellyfin has an item id for it — hence `pending-scan`, the normal
+ * transient state right after an import, where the fix is a library scan
+ * rather than a re-download.
  */
 export type ReadyState = 'ready' | 'pending-scan' | 'unavailable';
 
@@ -26,6 +35,8 @@ export interface ReadyItem {
   episodeTitle?: string;
   importedAt?: number;
   libraryPath?: string;
+  /** `imported_files.id` — what the built-in player addresses episodes by. */
+  fileId?: number;
   state: ReadyState;
   itemId?: string;
   played: boolean;
@@ -37,9 +48,48 @@ async function resolveSeriesItemId(subscription: Subscription): Promise<string |
   return (await jellyfin.findSeries(seriesPath, subscription.title))?.Id;
 }
 
-/** Library path of the video we hardlinked for a download, if we recorded one. */
-function videoPathFor(downloadId: number): string | undefined {
-  return importedFiles.forDownload(downloadId).find((f) => f.kind === 'video')?.libraryPath;
+/**
+ * The video we hardlinked for a download.
+ *
+ * A batch torrent imports several episodes under one download id but the
+ * download row records only the first episode number, so this returns the
+ * first video row to match — the rest are reachable through the download
+ * detail endpoint.
+ */
+function videoFor(downloadId: number) {
+  return importedFiles.videosFor(downloadId)[0];
+}
+
+/**
+ * Fill in playability and watched state from local sources alone.
+ *
+ * The file being on disk is the whole of "playable" for the built-in player,
+ * and `playback_progress` is where it records how far you got — so nothing
+ * here touches the network, and an episode is watchable the instant it lands
+ * rather than whenever an external scan gets round to it.
+ */
+async function resolveLocally(items: ReadyItem[]): Promise<ReadyItem[]> {
+  const fileIds = items.map((item) => item.fileId).filter((id): id is number => id !== undefined);
+  const progress = playbackProgress.forFiles(fileIds);
+
+  await Promise.all(
+    items.map(async (item) => {
+      if (!item.libraryPath || !(await pathExists(item.libraryPath))) {
+        item.state = 'unavailable';
+        return;
+      }
+      item.state = 'ready';
+
+      const saved = item.fileId === undefined ? undefined : progress.get(item.fileId);
+      if (!saved) return;
+      item.played = saved.played;
+      if (saved.durationMs && saved.durationMs > 0) {
+        item.playedPercentage = (saved.positionMs / saved.durationMs) * 100;
+      }
+    })
+  );
+
+  return items;
 }
 
 async function buildReadyItems(limit: number): Promise<{
@@ -76,6 +126,7 @@ async function buildReadyItems(limit: number): Promise<{
       );
     }
 
+    const video = videoFor(download.id);
     base.push({
       downloadId: download.id,
       subscriptionId: subscription?.id,
@@ -86,16 +137,21 @@ async function buildReadyItems(limit: number): Promise<{
         ? subjectTitles.get(subscription.subjectId)?.get(Math.floor(episode))
         : undefined,
       importedAt: download.importedAt,
-      libraryPath: videoPathFor(download.id),
+      libraryPath: video?.libraryPath,
+      fileId: video?.id,
       state: 'unavailable',
       played: false
     });
   }
 
+  if (playerMode() === 'builtin') return { items: await resolveLocally(base) };
+
   if (!config.JELLYFIN_API_KEY || !config.JELLYFIN_USER_ID) {
     return {
       items: base,
-      error: 'JELLYFIN_API_KEY and JELLYFIN_USER_ID must be set to link episodes to Jellyfin.'
+      error:
+        'PLAYER_MODE is jellyfin but JELLYFIN_API_KEY / JELLYFIN_USER_ID are not set. ' +
+        'Set them, or switch to PLAYER_MODE=builtin to play episodes here.'
     };
   }
 
@@ -166,6 +222,7 @@ export const libraryRoutes = new Hono()
       publicUrl: config.JELLYFIN_PUBLIC_URL ?? null,
       serverId: (await jellyfin.serverId()) ?? null,
       jellyfinConfigured: Boolean(config.JELLYFIN_API_KEY && config.JELLYFIN_USER_ID),
+      playerMode: playerMode(),
       error: error ?? null
     });
   })
@@ -183,6 +240,7 @@ export const libraryRoutes = new Hono()
       item: match ?? null,
       publicUrl: config.JELLYFIN_PUBLIC_URL ?? null,
       serverId: (await jellyfin.serverId()) ?? null,
+      playerMode: playerMode(),
       error: error ?? null
     });
   })

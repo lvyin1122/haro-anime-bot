@@ -18,6 +18,7 @@ import { SearchPage } from './routes/SearchPage';
 import { SettingsPage } from './routes/SettingsPage';
 import { SubscriptionPage } from './routes/SubscriptionPage';
 import { SubscriptionsPage } from './routes/SubscriptionsPage';
+import { WatchPage } from './routes/WatchPage';
 import './styles.css';
 
 const rootRoute = createRootRoute({ component: Layout });
@@ -50,6 +51,7 @@ const routes = [
     component: SubscriptionPage
   }),
   createRoute({ getParentRoute: () => rootRoute, path: '/library', component: LibraryPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/watch/$fileId', component: WatchPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/downloads', component: DownloadsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage })
 ];

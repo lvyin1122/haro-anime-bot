@@ -6,6 +6,10 @@
 #
 #   ./scripts/preflight.sh
 #
+# For a development machine use scripts/bootstrap.sh instead — the dev stack
+# keeps downloads and the library in Docker-managed volumes, so none of the
+# host-path checks below apply to it.
+#
 set -uo pipefail
 
 pass=0 warn=0 fail=0
@@ -38,6 +42,15 @@ case "$DOWNLOAD_HOST_PATH" in ./*) DOWNLOAD_HOST_PATH="$PWD/${DOWNLOAD_HOST_PATH
 case "$LIBRARY_HOST_PATH" in ./*) LIBRARY_HOST_PATH="$PWD/${LIBRARY_HOST_PATH#./}" ;; esac
 
 if [ -z "$DOWNLOAD_HOST_PATH" ] || [ -z "$LIBRARY_HOST_PATH" ]; then
+  # The dev stack puts both roots in named volumes, so docker-compose.yml has
+  # no host path to find and none of these checks would mean anything.
+  if docker ps --filter 'name=haro-dev' --format '{{.Names}}' 2>/dev/null | grep -q .; then
+    echo "The development stack is running (haro-dev)."
+    echo "preflight.sh checks the production compose file; the dev stack keeps"
+    echo "downloads and the library in Docker volumes, where hardlinks always work."
+    echo "  ./scripts/bootstrap.sh          to (re)start it"
+    exit 0
+  fi
   echo "Could not read the volume mappings for $CONTAINER_DOWNLOAD and $CONTAINER_LIBRARY"
   echo "from docker-compose.yml. Pass them explicitly:"
   echo "  DOWNLOAD_HOST_PATH=/srv/downloads/complete LIBRARY_HOST_PATH=/srv/media/anime $0"
@@ -177,8 +190,20 @@ check_http() {
     note "$name did not answer at $url (fine if it only listens inside Docker)"
   fi
 }
-check_http "qBittorrent" "http://127.0.0.1:8080/api/v2/app/version"
-check_http "Jellyfin"    "http://127.0.0.1:8096/System/Info/Public"
+# Probe on the loopback port these services are configured on rather than a
+# fixed 8080/8096 — the hostname in .env is container-side and resolves nowhere
+# out here, but the port is the one that got published.
+local_url() { # local_url <configured-url> <default-port> <path>
+  local port
+  port=$(printf '%s' "$1" | sed -n 's|^https\?://[^/:]*:\([0-9]\+\).*|\1|p')
+  printf 'http://127.0.0.1:%s%s' "${port:-$2}" "$3"
+}
+check_http "qBittorrent" "$(local_url "${QBITTORRENT_URL:-}" 8080 /api/v2/app/version)"
+if [ "${PLAYER_MODE:-auto}" = "builtin" ] || [ -z "${JELLYFIN_API_KEY:-}" ]; then
+  ok "Jellyfin not in use (PLAYER_MODE=${PLAYER_MODE:-auto}, no API key) — built-in player"
+else
+  check_http "Jellyfin" "$(local_url "${JELLYFIN_URL:-}" 8096 /System/Info/Public)"
+fi
 check_http "AnimeGarden" "https://api.animes.garden/resources?pageSize=1"
 check_http "Bangumi"     "https://api.bgm.tv/calendar"
 

@@ -40,7 +40,7 @@ export function Button({
         'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition',
         'disabled:cursor-not-allowed disabled:opacity-45',
         size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-2 text-sm',
-        variant === 'primary' && 'bg-brand text-white hover:bg-brand/85',
+        variant === 'primary' && 'bg-brand font-semibold text-ink-950 hover:bg-brand/85',
         variant === 'danger' && 'bg-red-600/90 text-white hover:bg-red-600',
         variant === 'default' &&
           'border border-ink-700 bg-ink-800 text-ink-100 hover:border-ink-500 hover:bg-ink-700',
@@ -99,13 +99,16 @@ export function Label({ children, hint }: { children: ReactNode; hint?: string }
   );
 }
 
+/** `progress` is Haro's eye colour: something is happening, nothing is wrong. */
+export type Tone = 'neutral' | 'brand' | 'progress' | 'success' | 'warn' | 'danger';
+
 export function Badge({
   children,
   tone = 'neutral',
   title
 }: {
   children: ReactNode;
-  tone?: 'neutral' | 'brand' | 'success' | 'warn' | 'danger';
+  tone?: Tone;
   title?: string;
 }) {
   return (
@@ -114,8 +117,9 @@ export function Badge({
       className={clsx(
         'inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap',
         tone === 'neutral' && 'bg-ink-800 text-ink-300',
-        tone === 'brand' && 'bg-brand/20 text-brand',
-        tone === 'success' && 'bg-emerald-500/15 text-emerald-400',
+        tone === 'brand' && 'bg-brand text-ink-950',
+        tone === 'progress' && 'bg-eye/15 text-eye',
+        tone === 'success' && 'bg-brand/15 text-brand',
         tone === 'warn' && 'bg-amber-500/15 text-amber-400',
         tone === 'danger' && 'bg-red-500/15 text-red-400'
       )}
@@ -125,17 +129,23 @@ export function Badge({
   );
 }
 
-const STATUS_TONE: Record<DownloadStatus | 'missing', 'neutral' | 'brand' | 'success' | 'warn' | 'danger'> =
-  {
-    missing: 'neutral',
-    queued: 'neutral',
-    downloading: 'brand',
-    completed: 'brand',
-    importing: 'brand',
-    imported: 'success',
-    failed: 'danger',
-    skipped: 'neutral'
-  };
+/**
+ * Green means it is in the library, amber means it is on its way.
+ *
+ * Three of these used to share the brand accent, which read fine while that
+ * accent was violet and would now make "downloading" and "imported" the same
+ * colour.
+ */
+const STATUS_TONE: Record<DownloadStatus | 'missing', Tone> = {
+  missing: 'neutral',
+  queued: 'neutral',
+  downloading: 'progress',
+  completed: 'progress',
+  importing: 'progress',
+  imported: 'success',
+  failed: 'danger',
+  skipped: 'neutral'
+};
 
 export function StatusBadge({ status }: { status: DownloadStatus | 'missing' }) {
   return <Badge tone={STATUS_TONE[status]}>{status}</Badge>;

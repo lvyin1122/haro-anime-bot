@@ -9,7 +9,8 @@ import {
   formatEpisode,
   formatRelative,
   formatSize,
-  jellyfinItemUrl,
+  playTarget,
+  type PlayTarget,
   type EpisodeSlot
 } from '../api';
 import { SubscribeDialog } from '../components/SubscribeDialog';
@@ -23,18 +24,19 @@ import {
   StatusBadge
 } from '../components/ui';
 
+/** Green: in the library. Amber: on its way. Red: went wrong. Grey: nothing yet. */
 const SLOT_STYLE: Record<string, string> = {
-  imported: 'border-emerald-700/60 bg-emerald-500/10 text-emerald-300',
-  downloading: 'border-brand-soft bg-brand/15 text-brand',
-  queued: 'border-brand-soft/60 bg-brand/10 text-brand',
-  completed: 'border-brand-soft/60 bg-brand/10 text-brand',
-  importing: 'border-brand-soft/60 bg-brand/10 text-brand',
+  imported: 'border-brand-soft bg-brand/20 text-brand',
+  downloading: 'border-eye/50 bg-eye/15 text-eye',
+  queued: 'border-eye/30 bg-eye/10 text-eye',
+  completed: 'border-eye/30 bg-eye/10 text-eye',
+  importing: 'border-eye/30 bg-eye/10 text-eye',
   failed: 'border-red-800/60 bg-red-500/10 text-red-300',
   skipped: 'border-ink-700 bg-ink-800/60 text-ink-500',
   missing: 'border-ink-800 bg-ink-900 text-ink-500'
 };
 
-function EpisodeCell({ slot, playUrl }: { slot: EpisodeSlot; playUrl?: string }) {
+function EpisodeCell({ slot, target }: { slot: EpisodeSlot; target?: PlayTarget }) {
   const unaired = slot.status === 'missing' && !slot.aired;
   const className = clsx(
     'block rounded-lg border px-2 py-1.5 text-center text-xs font-medium',
@@ -42,14 +44,27 @@ function EpisodeCell({ slot, playUrl }: { slot: EpisodeSlot; playUrl?: string })
   );
 
   const title = `E${slot.ep} · ${slot.title}\n${slot.airdate ?? 'TBA'} · ${slot.status}${
-    playUrl ? '\nClick to play in Jellyfin' : ''
+    target ? '\nClick to play' : ''
   }`;
 
   // An imported episode doubles as its own play link.
-  if (playUrl) {
+  if (target?.internal) {
+    return (
+      <Link
+        to="/watch/$fileId"
+        params={{ fileId: String(target.fileId) }}
+        title={title}
+        className={clsx(className, 'transition hover:brightness-150')}
+      >
+        {slot.ep}
+      </Link>
+    );
+  }
+
+  if (target) {
     return (
       <a
-        href={playUrl}
+        href={target.href}
         target="_blank"
         rel="noreferrer"
         title={title}
@@ -90,15 +105,13 @@ export function SubscriptionPage() {
 
   const ready = useQuery({ queryKey: ['ready', 100], queryFn: () => api.ready(100) });
 
-  // Episode number → Jellyfin deep link, for this subscription only.
-  const playUrls = new Map<number, string>();
+  // Episode number → where its Play link goes, for this subscription only.
+  const playTargets = new Map<number, PlayTarget>();
   if (ready.data) {
     for (const item of ready.data.items) {
-      if (item.subscriptionId !== subscriptionId || item.state !== 'ready' || !item.itemId) continue;
-      playUrls.set(
-        Math.floor(item.episode),
-        jellyfinItemUrl(ready.data.publicUrl, item.itemId, ready.data.serverId)
-      );
+      if (item.subscriptionId !== subscriptionId) continue;
+      const target = playTarget(ready.data, item);
+      if (target) playTargets.set(Math.floor(item.episode), target);
     }
   }
 
@@ -236,16 +249,16 @@ export function SubscriptionPage() {
           <Card>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1.5">
               {slots.map((slot) => (
-                <EpisodeCell key={slot.ep} slot={slot} playUrl={playUrls.get(slot.ep)} />
+                <EpisodeCell key={slot.ep} slot={slot} target={playTargets.get(slot.ep)} />
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-ink-500">
               <span className="flex items-center gap-1">
-                <span className="size-2.5 rounded border border-emerald-700/60 bg-emerald-500/10" />
+                <span className="size-2.5 rounded border border-brand-soft bg-brand/20" />
                 in library — click to play
               </span>
               <span className="flex items-center gap-1">
-                <span className="size-2.5 rounded border border-brand-soft bg-brand/15" /> in progress
+                <span className="size-2.5 rounded border border-eye/50 bg-eye/15" /> in progress
               </span>
               <span className="flex items-center gap-1">
                 <span className="size-2.5 rounded border border-ink-800 bg-ink-900" /> missing

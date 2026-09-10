@@ -7,8 +7,40 @@
 # The server is bundled by esbuild into a single dist/index.js with all
 # dependencies inlined, so the runtime stage carries no node_modules at all
 # and there is no native module / node-gyp step anywhere in the build.
+#
+# Stages: `dev` (docker-compose.dev.yml), `build` → `runtime` (production).
 
-# ---------------------------------------------------------------------------
+# --- dev -------------------------------------------------------------------
+# Used only by docker-compose.dev.yml, which bind-mounts the source over /app.
+# It exists so ffmpeg and pnpm are baked into the image instead of being
+# installed on every `up`.
+FROM node:26-alpine AS dev
+WORKDIR /app
+
+RUN apk add --no-cache tzdata ffmpeg
+
+# The container runs as the developer's own uid (see docker-compose.dev.yml) so
+# that files it writes into the bind-mounted source tree are not root-owned.
+# That uid has no passwd entry, so HOME must point somewhere world-writable and
+# the pnpm store must be reachable without one.
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    HOME=/tmp \
+    npm_config_store_dir=/pnpm/store \
+    NODE_ENV=development
+RUN npm install -g pnpm@11.10.0
+
+# Warm the pnpm store at image-build time so the first `up` resolves from disk
+# rather than the network. node_modules themselves live in named volumes that
+# start empty, so the install still has to run — it is just fast.
+# Non-fatal: a cold store only makes that first install slower.
+COPY pnpm-lock.yaml ./
+RUN pnpm fetch || true
+RUN chmod -R 0777 /pnpm
+
+CMD ["sh", "-c", "pnpm install --prefer-offline && pnpm dev"]
+
+# --- build -----------------------------------------------------------------
 FROM node:26-alpine AS build
 WORKDIR /app
 
@@ -19,25 +51,28 @@ ENV NODE_OPTIONS=--max-old-space-size=1536
 
 RUN npm install -g pnpm@11.10.0
 
-# Copy manifests first so dependency install is cached independently of source.
-COPY package.json pnpm-workspace.yaml ./
+# Copy manifests and the lockfile first so dependency install is cached
+# independently of source — and so --frozen-lockfile can actually succeed.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY server/package.json ./server/
 COPY web/package.json ./web/
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
 # web → web/dist (static assets), server → server/dist/index.js (bundle)
 RUN pnpm --filter @haro/web build && pnpm --filter @haro/server build
 
-# ---------------------------------------------------------------------------
+# --- runtime ---------------------------------------------------------------
 FROM node:26-alpine AS runtime
 WORKDIR /app
 
-RUN apk add --no-cache tzdata wget
+# ffmpeg/ffprobe back the built-in player: ffprobe decides direct-play vs
+# remux vs transcode, ffmpeg produces the HLS segments.
+RUN apk add --no-cache tzdata wget ffmpeg
 
 ENV NODE_ENV=production \
-    PORT=3000 \
+    PORT=7802 \
     WEB_ROOT=/app/web \
     # Bounded heap so Haro cannot crowd out Jellyfin transcoding on a shared
     # Pi. Far more than this workload needs — the largest allocation is a
@@ -47,13 +82,13 @@ ENV NODE_ENV=production \
 COPY --from=build /app/server/dist ./
 COPY --from=build /app/web/dist ./web
 
-EXPOSE 3000
+EXPOSE 7802
 
 # /api/health/live is dependency-free — it answers even when qBittorrent or
 # Jellyfin are down, so an unhealthy container means the app itself is broken.
 # The start period is generous because a cold Pi 4B on an SD card takes its
 # time getting Node up.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget -qO- http://127.0.0.1:3000/api/health/live || exit 1
+  CMD wget -qO- http://127.0.0.1:7802/api/health/live || exit 1
 
 CMD ["node", "index.js"]

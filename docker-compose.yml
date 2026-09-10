@@ -23,7 +23,7 @@ services:
     container_name: haro
     restart: unless-stopped
     ports:
-      - '3000:3000'
+      - '7802:7802'
     env_file: .env
 
     # Must match qBittorrent's PUID/PGID: we create hardlinks inside its
@@ -43,7 +43,7 @@ services:
       - /srv/media/anime:/media/anime
 
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/api/health/live']
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:7802/api/health/live']
       interval: 30s
       timeout: 10s
       # A cold Pi 4B booting from SD needs well over 15s to answer.
