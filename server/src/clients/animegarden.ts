@@ -130,10 +130,3 @@ export function isEpisodeType(type: string | undefined): boolean {
   return !type || !NON_EPISODE_TYPES.has(type.trim());
 }
 
-/** AnimeGarden reports sizes in KB. */
-export function formatSize(kb: number | undefined): string {
-  if (!kb || kb <= 0) return '—';
-  if (kb < 1024) return `${kb.toFixed(0)} KB`;
-  if (kb < 1024 * 1024) return `${(kb / 1024).toFixed(1)} MB`;
-  return `${(kb / 1024 / 1024).toFixed(2)} GB`;
-}

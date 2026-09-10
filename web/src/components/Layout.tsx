@@ -12,18 +12,51 @@ import {
 } from 'lucide-react';
 
 import { api } from '../api';
+import { useT, type TranslationKey } from '../i18n';
 
-const NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/search', label: 'Search', icon: Search },
-  { to: '/calendar', label: 'Airing', icon: CalendarDays },
-  { to: '/subscriptions', label: 'Subscriptions', icon: Rss },
-  { to: '/library', label: 'Library', icon: PlayCircle },
-  { to: '/downloads', label: 'Downloads', icon: Download },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon }
-] as const;
+const NAV: ReadonlyArray<{
+  to: string;
+  labelKey: TranslationKey;
+  icon: typeof LayoutDashboard;
+}> = [
+  { to: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { to: '/search', labelKey: 'nav.search', icon: Search },
+  { to: '/calendar', labelKey: 'nav.calendar', icon: CalendarDays },
+  { to: '/subscriptions', labelKey: 'nav.subscriptions', icon: Rss },
+  { to: '/library', labelKey: 'nav.library', icon: PlayCircle },
+  { to: '/downloads', labelKey: 'nav.downloads', icon: Download },
+  { to: '/settings', labelKey: 'nav.settings', icon: SettingsIcon }
+];
+
+/**
+ * Haro: a green sphere with two lit eyes, a seam across the middle and ear
+ * panels that flip open. Kept identical to public/favicon.svg — the tab icon
+ * and the header mark being the same shape is most of what makes a small app
+ * feel like one thing.
+ */
+function HaroMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden className={className}>
+      <rect x="-1" y="9.5" width="7" height="13" rx="3" fill="var(--color-brand-soft)" />
+      <rect x="26" y="9.5" width="7" height="13" rx="3" fill="var(--color-brand-soft)" />
+      <circle cx="16" cy="16" r="14" fill="var(--color-brand)" />
+      <path
+        d="M2.7 17.6h26.6"
+        stroke="var(--color-ink-950)"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
+      <circle cx="10.6" cy="12.2" r="3.7" fill="var(--color-ink-950)" />
+      <circle cx="21.4" cy="12.2" r="3.7" fill="var(--color-ink-950)" />
+      <circle cx="10.6" cy="12.2" r="1.9" fill="var(--color-eye)" />
+      <circle cx="21.4" cy="12.2" r="1.9" fill="var(--color-eye)" />
+    </svg>
+  );
+}
 
 export function Layout() {
+  const t = useT();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
   // Drives the header dot; a slow poll is enough to notice qBittorrent dying.
@@ -49,14 +82,12 @@ export function Layout() {
       <header className="sticky top-0 z-40 border-b border-ink-800 bg-ink-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-2.5">
           <Link to="/" className="flex shrink-0 items-center gap-2">
-            <span className="grid size-7 place-items-center rounded-lg bg-brand text-sm font-bold text-white">
-              H
-            </span>
+            <HaroMark className="size-7 shrink-0" />
             <span className="hidden text-sm font-semibold sm:block">Haro</span>
           </Link>
 
           <nav className="flex flex-1 items-center gap-0.5 overflow-x-auto">
-            {NAV.map(({ to, label, icon: Icon }) => {
+            {NAV.map(({ to, labelKey, icon: Icon }) => {
               const active = to === '/' ? pathname === '/' : pathname.startsWith(to);
               return (
                 <Link
@@ -70,9 +101,9 @@ export function Layout() {
                   )}
                 >
                   <Icon className="size-3.5" />
-                  <span className="hidden md:block">{label}</span>
+                  <span className="hidden md:block">{t(labelKey)}</span>
                   {to === '/library' && unwatched > 0 && (
-                    <span className="rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">
+                    <span className="rounded-full bg-brand px-1.5 text-[10px] font-semibold text-ink-950">
                       {unwatched}
                     </span>
                   )}
@@ -86,18 +117,22 @@ export function Layout() {
             title={
               health.data
                 ? health.data.services.map((s) => `${s.name}: ${s.detail}`).join('\n')
-                : 'Checking services…'
+                : t('health.checking')
             }
             className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] text-ink-500 hover:bg-ink-900"
           >
             <span
               className={clsx(
                 'size-2 rounded-full',
-                !health.data ? 'bg-ink-600' : degraded ? 'bg-amber-500' : 'bg-emerald-500'
+                !health.data ? 'bg-ink-600' : degraded ? 'bg-eye' : 'bg-brand'
               )}
             />
             <span className="hidden lg:block">
-              {!health.data ? 'checking' : degraded ? 'degraded' : 'healthy'}
+              {!health.data
+                ? t('health.checking')
+                : degraded
+                  ? t('health.degraded')
+                  : t('health.ok')}
             </span>
           </Link>
         </div>

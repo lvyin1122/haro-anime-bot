@@ -305,6 +305,18 @@ export interface ImportedFile {
   createdAt: number;
 }
 
+function toImportedFile(row: Record<string, unknown>): ImportedFile {
+  return {
+    id: Number(row.id),
+    downloadId: Number(row.download_id),
+    sourcePath: String(row.source_path),
+    libraryPath: String(row.library_path),
+    episode: num(row.episode),
+    kind: String(row.kind) as ImportedFile['kind'],
+    createdAt: Number(row.created_at)
+  };
+}
+
 export const importedFiles = {
   record(input: Omit<ImportedFile, 'id' | 'createdAt'>): void {
     run(
@@ -323,15 +335,190 @@ export const importedFiles = {
     return all<Record<string, unknown>>(
       'SELECT * FROM imported_files WHERE download_id = ? ORDER BY id',
       downloadId
-    ).map((row) => ({
-      id: Number(row.id),
-      downloadId: Number(row.download_id),
-      sourcePath: String(row.source_path),
-      libraryPath: String(row.library_path),
-      episode: num(row.episode),
-      kind: String(row.kind) as ImportedFile['kind'],
-      createdAt: Number(row.created_at)
-    }));
+    ).map(toImportedFile);
+  },
+
+  find(id: number): ImportedFile | undefined {
+    const row = get<Record<string, unknown>>('SELECT * FROM imported_files WHERE id = ?', id);
+    return row ? toImportedFile(row) : undefined;
+  },
+
+  /** Video files of a download, oldest first — one per episode for a batch. */
+  videosFor(downloadId: number): ImportedFile[] {
+    return all<Record<string, unknown>>(
+      `SELECT * FROM imported_files WHERE download_id = ? AND kind = 'video' ORDER BY episode, id`,
+      downloadId
+    ).map(toImportedFile);
+  },
+
+  /**
+   * Sidecar subtitles that belong with a video. Episode is the join key: a
+   * batch import puts several episodes' subtitles under one download id.
+   */
+  subtitlesFor(downloadId: number, episode?: number): ImportedFile[] {
+    const rows =
+      episode === undefined
+        ? all<Record<string, unknown>>(
+            `SELECT * FROM imported_files WHERE download_id = ? AND kind = 'subtitle' ORDER BY id`,
+            downloadId
+          )
+        : all<Record<string, unknown>>(
+            `SELECT * FROM imported_files
+             WHERE download_id = ? AND kind = 'subtitle' AND (episode IS NULL OR episode = ?)
+             ORDER BY id`,
+            downloadId,
+            episode
+          );
+    return rows.map(toImportedFile);
+  }
+};
+
+// --- playback progress -----------------------------------------------------
+
+/** Local watched/resume state. Only written when the built-in player is in use. */
+export interface PlaybackProgress {
+  importedFileId: number;
+  positionMs: number;
+  durationMs?: number;
+  played: boolean;
+  updatedAt: number;
+}
+
+/** Past this fraction of the runtime an episode counts as watched, as Jellyfin does. */
+export const PLAYED_THRESHOLD = 0.9;
+
+function toProgress(row: Record<string, unknown>): PlaybackProgress {
+  return {
+    importedFileId: Number(row.imported_file_id),
+    positionMs: Number(row.position_ms),
+    durationMs: num(row.duration_ms),
+    played: Number(row.played) === 1,
+    updatedAt: Number(row.updated_at)
+  };
+}
+
+export const playbackProgress = {
+  find(importedFileId: number): PlaybackProgress | undefined {
+    const row = get<Record<string, unknown>>(
+      'SELECT * FROM playback_progress WHERE imported_file_id = ?',
+      importedFileId
+    );
+    return row ? toProgress(row) : undefined;
+  },
+
+  /** One query for a whole page of the library rather than one per row. */
+  forFiles(importedFileIds: number[]): Map<number, PlaybackProgress> {
+    if (importedFileIds.length === 0) return new Map();
+    const rows = all<Record<string, unknown>>(
+      `SELECT * FROM playback_progress
+       WHERE imported_file_id IN (${importedFileIds.map(() => '?').join(', ')})`,
+      ...importedFileIds
+    );
+    return new Map(rows.map((row) => [Number(row.imported_file_id), toProgress(row)]));
+  },
+
+  save(input: {
+    importedFileId: number;
+    positionMs: number;
+    durationMs?: number;
+    played?: boolean;
+  }): PlaybackProgress {
+    const played =
+      input.played ??
+      (input.durationMs !== undefined &&
+        input.durationMs > 0 &&
+        input.positionMs / input.durationMs >= PLAYED_THRESHOLD);
+
+    run(
+      `INSERT INTO playback_progress (imported_file_id, position_ms, duration_ms, played, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(imported_file_id) DO UPDATE SET
+         position_ms = excluded.position_ms,
+         duration_ms = COALESCE(excluded.duration_ms, playback_progress.duration_ms),
+         -- Watched is sticky: finishing an episode then rewatching the first
+         -- minute must not push it back into the "new" list.
+         played      = MAX(playback_progress.played, excluded.played),
+         updated_at  = excluded.updated_at`,
+      input.importedFileId,
+      Math.max(0, Math.round(input.positionMs)),
+      input.durationMs === undefined ? null : Math.round(input.durationMs),
+      played ? 1 : 0,
+      Date.now()
+    );
+    return this.find(input.importedFileId)!;
+  },
+
+  setPlayed(importedFileId: number, played: boolean): void {
+    run(
+      `INSERT INTO playback_progress (imported_file_id, position_ms, played, updated_at)
+       VALUES (?, 0, ?, ?)
+       ON CONFLICT(imported_file_id) DO UPDATE SET
+         played      = excluded.played,
+         -- Marking unwatched clears the resume point; marking watched keeps it.
+         position_ms = CASE WHEN excluded.played = 1 THEN playback_progress.position_ms ELSE 0 END,
+         updated_at  = excluded.updated_at`,
+      importedFileId,
+      played ? 1 : 0,
+      Date.now()
+    );
+  }
+};
+
+// --- media probe cache -----------------------------------------------------
+
+export interface MediaProbeRow {
+  importedFileId: number;
+  size: number;
+  mtimeMs: number;
+  durationMs?: number;
+  container?: string;
+  streamsJson: string;
+  keyframesJson?: string;
+  probedAt: number;
+}
+
+export const mediaProbe = {
+  /** Returns the cached probe only if the file on disk still matches it. */
+  find(importedFileId: number, size: number, mtimeMs: number): MediaProbeRow | undefined {
+    const row = get<Record<string, unknown>>(
+      'SELECT * FROM media_probe WHERE imported_file_id = ?',
+      importedFileId
+    );
+    if (!row) return undefined;
+    if (Number(row.size) !== size || Number(row.mtime_ms) !== Math.round(mtimeMs)) return undefined;
+    return {
+      importedFileId: Number(row.imported_file_id),
+      size: Number(row.size),
+      mtimeMs: Number(row.mtime_ms),
+      durationMs: num(row.duration_ms),
+      container: str(row.container),
+      streamsJson: String(row.streams_json),
+      keyframesJson: str(row.keyframes_json),
+      probedAt: Number(row.probed_at)
+    };
+  },
+
+  save(input: Omit<MediaProbeRow, 'probedAt'>): void {
+    run(
+      `INSERT INTO media_probe
+         (imported_file_id, size, mtime_ms, duration_ms, container, streams_json, keyframes_json, probed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(imported_file_id) DO UPDATE SET
+         size = excluded.size, mtime_ms = excluded.mtime_ms,
+         duration_ms = excluded.duration_ms, container = excluded.container,
+         streams_json = excluded.streams_json,
+         -- A keyframe scan is expensive; keep the old one unless a new one came.
+         keyframes_json = COALESCE(excluded.keyframes_json, media_probe.keyframes_json),
+         probed_at = excluded.probed_at`,
+      input.importedFileId,
+      input.size,
+      Math.round(input.mtimeMs),
+      input.durationMs ?? null,
+      input.container ?? null,
+      input.streamsJson,
+      input.keyframesJson ?? null,
+      Date.now()
+    );
   }
 };
 

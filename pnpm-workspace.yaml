@@ -6,3 +6,7 @@ packages:
 # @esbuild/linux-arm64 for the Pi). Without this the server build cannot run.
 allowBuilds:
   esbuild: true
+  # jassub → lfa-ponyfill's postinstall re-downloads the Google Fonts index.
+  # The package ships a fonts.json already, and letting an install reach the
+  # network would break the Docker build and every offline `pnpm install`.
+  lfa-ponyfill: false

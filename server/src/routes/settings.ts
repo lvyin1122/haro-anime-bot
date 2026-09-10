@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 
 import * as jellyfin from '../clients/jellyfin.ts';
 import * as qb from '../clients/qbittorrent.ts';
-import { config, configWarnings } from '../config.ts';
+import { config, configWarnings, playerMode } from '../config.ts';
 import { recentEvents } from '../data.ts';
 import { probeHardlink } from '../core/paths.ts';
 import { pollAll } from '../core/scheduler.ts';
@@ -21,6 +21,8 @@ export const settingsRoutes = new Hono()
         qbittorrentUsername: config.QBITTORRENT_USERNAME,
         qbittorrentPasswordSet: Boolean(config.QBITTORRENT_PASSWORD),
         qbittorrentCategory: config.QBITTORRENT_CATEGORY,
+        playerMode: config.PLAYER_MODE,
+        playerModeResolved: playerMode(),
         jellyfinUrl: config.JELLYFIN_URL,
         jellyfinPublicUrl: config.JELLYFIN_PUBLIC_URL ?? null,
         jellyfinApiKeySet: Boolean(config.JELLYFIN_API_KEY),

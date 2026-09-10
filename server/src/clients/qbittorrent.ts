@@ -47,7 +47,14 @@ export class QbittorrentError extends Error {
 }
 
 /** Cached SID cookie. qBittorrent sessions are long-lived but not permanent. */
-let sid: string | undefined;
+/**
+ * The session cookie as `name=value`.
+ *
+ * The name is not fixed: qBittorrent 4.x issued `SID`, while 5.x issues
+ * `QBT_SID_<port>` so that two instances on one host do not clobber each
+ * other's session. Storing the whole pair keeps this working across both.
+ */
+let sessionCookie: string | undefined;
 let loginInFlight: Promise<string> | undefined;
 
 function apiUrl(path: string): string {
@@ -61,8 +68,23 @@ function apiUrl(path: string): string {
  */
 function baseHeaders(): Record<string, string> {
   const headers: Record<string, string> = { Referer: config.QBITTORRENT_URL };
-  if (sid) headers.Cookie = `SID=${sid}`;
+  if (sessionCookie) headers.Cookie = sessionCookie;
   return headers;
+}
+
+/**
+ * Pull the session cookie out of a `Set-Cookie` list as `name=value`.
+ *
+ * The name varies by version — `SID` on 4.x, `QBT_SID_<port>` on 5.x — so this
+ * matches on shape rather than on a fixed name, and returns the pair so it can
+ * be echoed back verbatim.
+ */
+export function parseSessionCookie(setCookie: string[]): string | undefined {
+  for (const value of setCookie) {
+    const match = /(?:^|\s)((?:QBT_)?SID[^=\s]*)=([^;]+)/.exec(value);
+    if (match) return `${match[1]}=${match[2]}`;
+  }
+  return undefined;
 }
 
 async function login(): Promise<string> {
@@ -89,8 +111,9 @@ async function login(): Promise<string> {
     if (!response.ok) {
       throw new QbittorrentError(`login failed: HTTP ${response.status}`, response.status);
     }
-    // qBittorrent answers 200 with the body "Fails." on bad credentials.
-    if (text !== 'Ok.') {
+    // Bad credentials come back as 200 with the body "Fails." — the status
+    // alone never tells you. Success is "Ok." on 4.x and an empty 204 on 5.x.
+    if (text && text !== 'Ok.') {
       throw new QbittorrentError(
         text.toLowerCase().startsWith('fail')
           ? 'login failed: wrong username or password'
@@ -98,14 +121,13 @@ async function login(): Promise<string> {
       );
     }
 
-    const cookie = response.headers.getSetCookie?.() ?? [];
-    const match = cookie.map((c) => /SID=([^;]+)/.exec(c)).find(Boolean);
-    if (!match?.[1]) {
-      throw new QbittorrentError('login succeeded but no SID cookie was returned');
+    const cookie = parseSessionCookie(response.headers.getSetCookie?.() ?? []);
+    if (!cookie) {
+      throw new QbittorrentError('login succeeded but no session cookie was returned');
     }
 
-    sid = match[1];
-    return sid;
+    sessionCookie = cookie;
+    return sessionCookie;
   })().finally(() => {
     loginInFlight = undefined;
   });
@@ -123,7 +145,7 @@ async function request(
 ): Promise<Response> {
   const { retryOnAuth = true, ...rest } = init;
 
-  if (!sid) await login();
+  if (!sessionCookie) await login();
 
   const response = await fetch(apiUrl(path), {
     ...rest,
@@ -132,7 +154,7 @@ async function request(
   });
 
   if (response.status === 403 && retryOnAuth) {
-    sid = undefined;
+    sessionCookie = undefined;
     await login();
     return request(path, { ...init, retryOnAuth: false });
   }
@@ -230,5 +252,5 @@ export function isComplete(torrent: QbTorrent): boolean {
 
 /** Reset cached auth. Exposed so the settings page can force a fresh login. */
 export function resetSession(): void {
-  sid = undefined;
+  sessionCookie = undefined;
 }

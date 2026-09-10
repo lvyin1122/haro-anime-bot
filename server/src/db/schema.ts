@@ -105,5 +105,36 @@ export const MIGRATIONS: string[] = [
   );
 
   CREATE INDEX idx_events_created ON events(created_at DESC);
+  `,
+
+  /* 2 */ `
+  -- Local watched/resume state, so the built-in player does not need Jellyfin
+  -- to remember where you got to. When PLAYER_MODE is jellyfin these rows are
+  -- simply not written, and Jellyfin's UserData stays the source of truth.
+  CREATE TABLE playback_progress (
+    imported_file_id INTEGER PRIMARY KEY REFERENCES imported_files(id) ON DELETE CASCADE,
+    position_ms      INTEGER NOT NULL DEFAULT 0,
+    duration_ms      INTEGER,
+    played           INTEGER NOT NULL DEFAULT 0,
+    updated_at       INTEGER NOT NULL
+  );
+
+  -- ffprobe output, cached. Probing costs a disk seek and ~100ms, and the
+  -- keyframe scan for the copy path costs rather more, so both are kept until
+  -- the file underneath changes (size + mtime are the invalidation key).
+  CREATE TABLE media_probe (
+    imported_file_id INTEGER PRIMARY KEY REFERENCES imported_files(id) ON DELETE CASCADE,
+    size             INTEGER NOT NULL,
+    mtime_ms         INTEGER NOT NULL,
+    duration_ms      INTEGER,
+    container        TEXT,
+    streams_json     TEXT    NOT NULL,
+    keyframes_json   TEXT,
+    probed_at        INTEGER NOT NULL
+  );
+
+  -- The player looks files up by download, then by kind; the existing index is
+  -- on download_id alone.
+  CREATE INDEX idx_imported_download_kind ON imported_files(download_id, kind);
   `
 ];

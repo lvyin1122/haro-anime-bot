@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import clsx from 'clsx';
 
 import { api } from '../api';
+import { useT } from '../i18n';
 import { Badge, Card, ErrorNote, Spinner } from '../components/ui';
 
 /** Bangumi's weekday ids are 1=Mon … 7=Sun; JS getDay() is 0=Sun. */
@@ -12,6 +13,7 @@ function todayWeekdayId(): number {
 }
 
 export function CalendarPage() {
+  const t = useT();
   const { data, isPending, error } = useQuery({
     queryKey: ['calendar'],
     queryFn: api.calendar,
@@ -20,7 +22,7 @@ export function CalendarPage() {
 
   const today = todayWeekdayId();
 
-  if (isPending) return <Spinner label="Loading airing schedule…" />;
+  if (isPending) return <Spinner label={t('calendar.loading')} />;
   if (error) return <ErrorNote>{(error as Error).message}</ErrorNote>;
 
   // Rotate so today comes first — that is what you actually want to see.
@@ -32,9 +34,9 @@ export function CalendarPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-semibold">Airing this week</h1>
+        <h1 className="text-lg font-semibold">{t('calendar.title')}</h1>
         <p className="mt-0.5 text-xs text-ink-500">
-          From Bangumi's broadcast calendar. Click a show to see releases and subscribe.
+          {t('calendar.subtitle')}
         </p>
       </div>
 
@@ -51,7 +53,7 @@ export function CalendarPage() {
                 <span className="text-sm font-medium">{day.weekday.cn}</span>
                 <span className="text-[11px] text-ink-500">{day.weekday.en}</span>
               </div>
-              {day.weekday.id === today && <Badge tone="brand">today</Badge>}
+              {day.weekday.id === today && <Badge tone="brand">{t('calendar.today')}</Badge>}
             </div>
 
             <div className="max-h-80 overflow-y-auto">
@@ -75,13 +77,13 @@ export function CalendarPage() {
                       {item.score !== undefined && item.score > 0 && (
                         <span className="text-[10px] text-ink-500">★ {item.score.toFixed(1)}</span>
                       )}
-                      {item.subscribed && <Badge tone="success">subscribed</Badge>}
+                      {item.subscribed && <Badge tone="success">{t('dashboard.subscribed')}</Badge>}
                     </div>
                   </div>
                 </Link>
               ))}
               {day.items.length === 0 && (
-                <div className="px-3 py-6 text-center text-xs text-ink-500">Nothing airing.</div>
+                <div className="px-3 py-6 text-center text-xs text-ink-500">{t('calendar.nothing')}</div>
               )}
             </div>
           </Card>

@@ -2,12 +2,18 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useState } from 'react';
-import { Search as SearchIcon } from 'lucide-react';
+import { Download, Search as SearchIcon } from 'lucide-react';
 
-import { api, formatRelative, formatSize } from '../api';
+import { api, formatSize, type Resource } from '../api';
+import { useRelativeTime, useT } from '../i18n';
+import { GrabDialog } from '../components/GrabDialog';
 import { Badge, Button, Card, EmptyState, ErrorNote, Input, Spinner } from '../components/ui';
 
 export function SearchPage() {
+  const t = useT();
+  const relative = useRelativeTime();
+  const [grabbing, setGrabbing] = useState<Resource>();
+  const [notice, setNotice] = useState<string>();
   const search = useSearch({ from: '/search' });
   const navigate = useNavigate();
   const [draft, setDraft] = useState(search.q ?? '');
@@ -79,8 +85,8 @@ export function SearchPage() {
 
       {!query && (
         <EmptyState
-          title="Search for something"
-          description="Anime search finds a show on Bangumi so you can subscribe to it. Release search looks directly at AnimeGarden torrents — useful for one-off grabs."
+          title={t('search.emptyTitle')}
+          description={t('search.emptyHint')}
         />
       )}
 
@@ -89,7 +95,7 @@ export function SearchPage() {
           {subjects.isPending && <Spinner />}
           {subjects.error && <ErrorNote>{(subjects.error as Error).message}</ErrorNote>}
           {subjects.data?.subjects.length === 0 && (
-            <EmptyState title="No anime found" description={`Nothing on Bangumi matches “${query}”.`} />
+            <EmptyState title={t('search.noAnime')} description={t('search.noAnimeHint', { query })} />
           )}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -136,12 +142,21 @@ export function SearchPage() {
         </>
       )}
 
+      {notice && (
+        <div className="rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-xs break-title text-ink-300">
+          {notice}
+        </div>
+      )}
+
       {tab === 'resources' && query && (
         <>
           {resources.isPending && <Spinner />}
           {resources.error && <ErrorNote>{(resources.error as Error).message}</ErrorNote>}
           {resources.data?.resources.length === 0 && (
-            <EmptyState title="No releases found" description={`AnimeGarden has nothing for “${query}”.`} />
+            <EmptyState
+              title={t('search.noReleasesTitle')}
+              description={t('search.noReleasesHint', { query })}
+            />
           )}
 
           <div className="space-y-1.5">
@@ -155,7 +170,7 @@ export function SearchPage() {
                   {resource.parsed.resolution && <Badge>{resource.parsed.resolution}</Badge>}
                   <Badge>{resource.type}</Badge>
                   <span className="text-[11px] text-ink-500">
-                    {formatSize(resource.size)} · {formatRelative(resource.createdAt)}
+                    {formatSize(resource.size)} · {relative(resource.createdAt)}
                   </span>
                   {resource.subjectId && (
                     <Link
@@ -167,14 +182,31 @@ export function SearchPage() {
                     </Link>
                   )}
                 </div>
-                <div className="break-title text-xs leading-snug text-ink-300">
-                  {resource.title}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="break-title text-xs leading-snug text-ink-300">
+                    {resource.title}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    className="shrink-0"
+                    onClick={() => setGrabbing(resource)}
+                  >
+                    <Download className="size-3" /> {t('grab.download')}
+                  </Button>
                 </div>
               </Card>
             ))}
           </div>
         </>
       )}
+
+      <GrabDialog
+        open={grabbing !== undefined}
+        resource={grabbing}
+        onClose={() => setGrabbing(undefined)}
+        onQueued={setNotice}
+      />
     </div>
   );
 }

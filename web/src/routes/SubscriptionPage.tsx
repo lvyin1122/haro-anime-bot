@@ -2,17 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useState } from 'react';
-import { History, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { DownloadCloud, History, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 
 import {
   api,
   formatEpisode,
-  formatRelative,
   formatSize,
-  jellyfinItemUrl,
+  playTarget,
+  type PlayTarget,
   type EpisodeSlot
 } from '../api';
 import { SubscribeDialog } from '../components/SubscribeDialog';
+import { useRelativeTime, useT } from '../i18n';
 import {
   Badge,
   Button,
@@ -23,18 +24,19 @@ import {
   StatusBadge
 } from '../components/ui';
 
+/** Green: in the library. Amber: on its way. Red: went wrong. Grey: nothing yet. */
 const SLOT_STYLE: Record<string, string> = {
-  imported: 'border-emerald-700/60 bg-emerald-500/10 text-emerald-300',
-  downloading: 'border-brand-soft bg-brand/15 text-brand',
-  queued: 'border-brand-soft/60 bg-brand/10 text-brand',
-  completed: 'border-brand-soft/60 bg-brand/10 text-brand',
-  importing: 'border-brand-soft/60 bg-brand/10 text-brand',
+  imported: 'border-brand-soft bg-brand/20 text-brand',
+  downloading: 'border-eye/50 bg-eye/15 text-eye',
+  queued: 'border-eye/30 bg-eye/10 text-eye',
+  completed: 'border-eye/30 bg-eye/10 text-eye',
+  importing: 'border-eye/30 bg-eye/10 text-eye',
   failed: 'border-red-800/60 bg-red-500/10 text-red-300',
   skipped: 'border-ink-700 bg-ink-800/60 text-ink-500',
   missing: 'border-ink-800 bg-ink-900 text-ink-500'
 };
 
-function EpisodeCell({ slot, playUrl }: { slot: EpisodeSlot; playUrl?: string }) {
+function EpisodeCell({ slot, target }: { slot: EpisodeSlot; target?: PlayTarget }) {
   const unaired = slot.status === 'missing' && !slot.aired;
   const className = clsx(
     'block rounded-lg border px-2 py-1.5 text-center text-xs font-medium',
@@ -42,14 +44,27 @@ function EpisodeCell({ slot, playUrl }: { slot: EpisodeSlot; playUrl?: string })
   );
 
   const title = `E${slot.ep} · ${slot.title}\n${slot.airdate ?? 'TBA'} · ${slot.status}${
-    playUrl ? '\nClick to play in Jellyfin' : ''
+    target ? '\nClick to play' : ''
   }`;
 
   // An imported episode doubles as its own play link.
-  if (playUrl) {
+  if (target?.internal) {
+    return (
+      <Link
+        to="/watch/$fileId"
+        params={{ fileId: String(target.fileId) }}
+        title={title}
+        className={clsx(className, 'transition hover:brightness-150')}
+      >
+        {slot.ep}
+      </Link>
+    );
+  }
+
+  if (target) {
     return (
       <a
-        href={playUrl}
+        href={target.href}
         target="_blank"
         rel="noreferrer"
         title={title}
@@ -68,6 +83,8 @@ function EpisodeCell({ slot, playUrl }: { slot: EpisodeSlot; playUrl?: string })
 }
 
 export function SubscriptionPage() {
+  const t = useT();
+  const relative = useRelativeTime();
   const { id } = useParams({ from: '/subscriptions/$id' });
   const subscriptionId = Number(id);
   const queryClient = useQueryClient();
@@ -90,15 +107,13 @@ export function SubscriptionPage() {
 
   const ready = useQuery({ queryKey: ['ready', 100], queryFn: () => api.ready(100) });
 
-  // Episode number → Jellyfin deep link, for this subscription only.
-  const playUrls = new Map<number, string>();
+  // Episode number → where its Play link goes, for this subscription only.
+  const playTargets = new Map<number, PlayTarget>();
   if (ready.data) {
     for (const item of ready.data.items) {
-      if (item.subscriptionId !== subscriptionId || item.state !== 'ready' || !item.itemId) continue;
-      playUrls.set(
-        Math.floor(item.episode),
-        jellyfinItemUrl(ready.data.publicUrl, item.itemId, ready.data.serverId)
-      );
+      if (item.subscriptionId !== subscriptionId) continue;
+      const target = playTarget(ready.data, item);
+      if (target) playTargets.set(Math.floor(item.episode), target);
     }
   }
 
@@ -110,15 +125,22 @@ export function SubscriptionPage() {
   };
 
   const scan = useMutation({
-    mutationFn: (backfill: boolean) => api.scanSubscription(subscriptionId, backfill),
+    mutationFn: (options: { backfill?: boolean; force?: boolean }) =>
+      api.scanSubscription(subscriptionId, options),
     onSuccess: ({ result }) => {
       setNotice(
-        `Found ${result.found} release(s), queued ${result.queued}, skipped ${result.skipped}.` +
-          (result.errors.length ? ` Errors: ${result.errors.join('; ')}` : '')
+        t('subscription.scanResult', {
+          found: result.found,
+          queued: result.queued,
+          skipped: result.skipped
+        }) +
+          (result.errors.length
+            ? t('subscription.scanErrors', { errors: result.errors.join('; ') })
+            : '')
       );
       invalidate();
     },
-    onError: (err: Error) => setNotice(`Scan failed: ${err.message}`)
+    onError: (err: Error) => setNotice(t('subscription.scanFailed', { error: err.message }))
   });
 
   const remove = useMutation({
@@ -186,28 +208,40 @@ export function SubscriptionPage() {
             <Button size="sm">Browse releases</Button>
           </Link>
           <Button size="sm" onClick={() => setEditing(true)}>
-            <Pencil className="size-3" /> Edit
+            <Pencil className="size-3" /> {t('subscription.edit')}
           </Button>
-          <Button size="sm" onClick={() => scan.mutate(false)} disabled={scan.isPending}>
-            <RefreshCw className={scan.isPending ? 'size-3 animate-spin' : 'size-3'} /> Check now
+          <Button size="sm" onClick={() => scan.mutate({})} disabled={scan.isPending}>
+            <RefreshCw className={scan.isPending ? 'size-3 animate-spin' : 'size-3'} />{' '}
+            {t('subscriptions.checkNow')}
           </Button>
           <Button
             size="sm"
-            onClick={() => scan.mutate(true)}
+            onClick={() => scan.mutate({ backfill: true })}
             disabled={scan.isPending}
-            title="Ignore the cursor and re-scan the full history for missing episodes"
+            title={t('subscription.backfillHint')}
           >
-            <History className="size-3" /> Backfill
+            <History className="size-3" /> {t('subscription.backfill')}
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={scan.isPending}
+            title={t('subscription.downloadAllHint')}
+            onClick={() => {
+              // This can hand a whole season to qBittorrent at once, so it
+              // asks first — and says what it will skip.
+              if (confirm(t('subscription.downloadAllConfirm', { title: subscription.title }))) {
+                scan.mutate({ backfill: true, force: true });
+              }
+            }}
+          >
+            <DownloadCloud className="size-3" /> {t('subscription.downloadAll')}
           </Button>
           <Button
             size="sm"
             variant="danger"
             onClick={() => {
-              if (
-                confirm(
-                  `Delete the subscription for “${subscription.title}”?\n\nFiles already in your Jellyfin library are kept.`
-                )
-              ) {
+              if (confirm(t('subscription.deleteConfirm', { title: subscription.title }))) {
                 remove.mutate();
               }
             }}
@@ -236,16 +270,16 @@ export function SubscriptionPage() {
           <Card>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] gap-1.5">
               {slots.map((slot) => (
-                <EpisodeCell key={slot.ep} slot={slot} playUrl={playUrls.get(slot.ep)} />
+                <EpisodeCell key={slot.ep} slot={slot} target={playTargets.get(slot.ep)} />
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-ink-500">
               <span className="flex items-center gap-1">
-                <span className="size-2.5 rounded border border-emerald-700/60 bg-emerald-500/10" />
+                <span className="size-2.5 rounded border border-brand-soft bg-brand/20" />
                 in library — click to play
               </span>
               <span className="flex items-center gap-1">
-                <span className="size-2.5 rounded border border-brand-soft bg-brand/15" /> in progress
+                <span className="size-2.5 rounded border border-eye/50 bg-eye/15" /> in progress
               </span>
               <span className="flex items-center gap-1">
                 <span className="size-2.5 rounded border border-ink-800 bg-ink-900" /> missing
@@ -272,14 +306,14 @@ export function SubscriptionPage() {
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">
-          Downloads <span className="text-ink-500">({downloads.length})</span>
+          {t('subscription.downloads')}{' '}
+          <span className="text-ink-500">({downloads.length})</span>
         </h2>
 
         {downloads.length === 0 && (
           <Card>
             <div className="text-xs text-ink-500">
-              Nothing grabbed yet. Use “Check now” to look for episodes published since the
-              subscription was created, or “Backfill” to scan the full history.
+              {t('subscription.nothingGrabbed')}
             </div>
           </Card>
         )}
@@ -295,12 +329,12 @@ export function SubscriptionPage() {
                       <Badge tone="brand">{formatEpisode(download.episode)}</Badge>
                     )}
                     {download.needsReview && (
-                      <Badge tone="warn" title="Episode number came from the fallback parser">
+                      <Badge tone="warn" title={t('downloads.checkEpisodeHint')}>
                         check episode
                       </Badge>
                     )}
                     <span className="text-[11px] text-ink-500">
-                      {formatSize(download.size)} · {formatRelative(download.addedAt)}
+                      {formatSize(download.size)} · {relative(download.addedAt)}
                     </span>
                   </div>
                   <div className="break-title text-[11px] leading-snug text-ink-300">
@@ -330,7 +364,7 @@ export function SubscriptionPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => reimport.mutate(download.id)}
-                      title="Rewrite the library files and NFOs for this download"
+                      title={t('downloads.reimportHint')}
                     >
                       Re-import
                     </Button>

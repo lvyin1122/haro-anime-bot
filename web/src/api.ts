@@ -82,6 +82,8 @@ export interface Subscription {
   lastCheckedAt?: number;
   cursorAt?: number;
   createdAt: number;
+  /** Cover art from the cached Bangumi subject, if one has been fetched. */
+  poster?: string | null;
   stats?: {
     total: number;
     imported: number;
@@ -155,8 +157,12 @@ export interface HardlinkProbe {
   detail: string;
 }
 
+/** Where Play sends you: Haro's own player, or the Jellyfin web client. */
+export type PlayerMode = 'builtin' | 'jellyfin';
+
 export interface Health {
   status: 'ok' | 'degraded';
+  playerMode: PlayerMode;
   services: ServiceStatus[];
   paths: {
     downloadRoot: string;
@@ -179,6 +185,8 @@ export interface ReadyItem {
   episodeTitle?: string;
   importedAt?: number;
   libraryPath?: string;
+  /** Identifies the file to the built-in player. Absent if nothing was imported. */
+  fileId?: number;
   state: ReadyState;
   itemId?: string;
   played: boolean;
@@ -191,7 +199,56 @@ export interface ReadyResponse {
   publicUrl: string | null;
   serverId: string | null;
   jellyfinConfigured: boolean;
+  playerMode: PlayerMode;
   error: string | null;
+}
+
+// --- built-in player -------------------------------------------------------
+
+/** How the server decided to deliver this file to this browser. */
+export type Delivery = 'direct' | 'remux' | 'transcode';
+
+export interface AudioTrack {
+  index: number;
+  label: string;
+  language?: string;
+  codec: string;
+  channels?: number;
+  isDefault: boolean;
+}
+
+export interface SubtitleTrack {
+  id: string;
+  label: string;
+  language?: string;
+  /** ASS goes through libass; WebVTT through a native <track>. */
+  format: 'ass' | 'webvtt';
+  source: 'embedded' | 'sidecar';
+  isDefault: boolean;
+  forced: boolean;
+  url: string;
+}
+
+export interface PlaybackInfo {
+  fileId: number;
+  downloadId: number;
+  subscriptionId: number | null;
+  seriesTitle: string;
+  season: number;
+  episode: number | null;
+  durationMs: number;
+  width: number | null;
+  height: number | null;
+  delivery: Delivery;
+  /** Why this is not a plain direct play, in words meant for a person. */
+  reasons: string[];
+  streamUrl: string;
+  audioTracks: AudioTrack[];
+  selectedAudio: number | null;
+  subtitleTracks: SubtitleTrack[];
+  /** Fonts attached to the file, for libass to typeset ASS subtitles with. */
+  fonts: string[];
+  resume: { positionMs: number; played: boolean };
 }
 
 export class ApiError extends Error {
@@ -323,9 +380,15 @@ export const api = {
   deleteSubscription: (id: number) =>
     request<{ ok: true }>(`/subscriptions/${id}`, { method: 'DELETE' }),
 
-  scanSubscription: (id: number, backfill = false) =>
+  /**
+   * Check a subscription now.
+   *
+   * `backfill` re-reads the full history instead of only what is new;
+   * `force` queues what it finds even when auto-download is off.
+   */
+  scanSubscription: (id: number, options: { backfill?: boolean; force?: boolean } = {}) =>
     request<{ result: { found: number; queued: number; skipped: number; errors: string[] } }>(
-      `/subscriptions/${id}/scan?backfill=${backfill}`,
+      `/subscriptions/${id}/scan?backfill=${options.backfill ?? false}&force=${options.force ?? false}`,
       { method: 'POST' }
     ),
 
@@ -363,8 +426,27 @@ export const api = {
       item: ReadyItem | null;
       publicUrl: string | null;
       serverId: string | null;
+      playerMode: PlayerMode;
       error: string | null;
     }>(`/library/episode/${downloadId}`),
+
+  playbackInfo: (fileId: number, caps: string, audioTrack?: number) => {
+    const query = new URLSearchParams({ caps });
+    if (audioTrack !== undefined) query.set('audio', String(audioTrack));
+    return request<PlaybackInfo>(`/play/${fileId}/info?${query}`);
+  },
+
+  saveProgress: (fileId: number, positionMs: number, durationMs?: number) =>
+    request<{ positionMs: number; played: boolean }>(`/play/${fileId}/progress`, {
+      method: 'POST',
+      body: JSON.stringify({ positionMs, durationMs })
+    }),
+
+  markPlayed: (fileId: number, played: boolean) =>
+    request<{ ok: true }>(`/play/${fileId}/played`, {
+      method: 'POST',
+      body: JSON.stringify({ played })
+    }),
 
   rescanLibrary: () =>
     request<{ ok: boolean; detail: string }>('/library/rescan', { method: 'POST' }),
@@ -399,12 +481,25 @@ export const api = {
 
 // --- formatting helpers ----------------------------------------------------
 
-/** AnimeGarden reports sizes in KB. */
-export function formatSize(kb?: number): string {
-  if (!kb || kb <= 0) return '—';
-  if (kb < 1024) return `${Math.round(kb)} KB`;
-  if (kb < 1024 * 1024) return `${(kb / 1024).toFixed(1)} MB`;
-  return `${(kb / 1024 / 1024).toFixed(2)} GB`;
+/**
+ * AnimeGarden reports sizes in **bytes**, and so does qBittorrent.
+ *
+ * This used to read them as kilobytes, which multiplied every size on the
+ * screen by 1024 — a 400MB episode was shown as 400GB. Sizes are the one
+ * number here nobody double-checks, so it stayed wrong for a while.
+ */
+export function formatSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '—';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  // Bytes and kilobytes are never interesting to a decimal place.
+  return `${value.toFixed(unit <= 1 ? 0 : value >= 100 ? 0 : 1)} ${units[unit]}`;
 }
 
 export function formatRelative(value: string | number): string {
@@ -430,9 +525,51 @@ export function formatEpisode(episode?: number): string {
  * Jellyfin sits on the same host Haro was loaded from — true for the standard
  * single-Pi setup, and overridable in .env when it is not.
  */
+/**
+ * Save a resume point during a page unload.
+ *
+ * `fetch` is cancelled when the tab goes away, so the last few seconds of
+ * progress would be lost exactly when it matters most — closing the tab
+ * mid-episode is the normal way to stop watching.
+ */
+export function beaconProgress(fileId: number, positionMs: number, durationMs?: number): void {
+  const body = JSON.stringify({ positionMs, durationMs });
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(`/api/play/${fileId}/progress`, new Blob([body], { type: 'application/json' }));
+    return;
+  }
+  void fetch(`/api/play/${fileId}/progress`, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/json' },
+    keepalive: true
+  }).catch(() => {});
+}
+
 export function jellyfinBase(publicUrl: string | null): string {
   if (publicUrl) return publicUrl.replace(/\/+$/, '');
   return `${window.location.protocol}//${window.location.hostname}:8096`;
+}
+
+/**
+ * Where an episode's Play button should go.
+ *
+ * Built-in playback is a route inside this app; Jellyfin is a link out to a
+ * different one. Callers render a `<Link>` or an `<a>` accordingly, which is
+ * the only difference between the two modes at the call site.
+ */
+export type PlayTarget = { internal: true; fileId: number } | { internal: false; href: string };
+
+export function playTarget(
+  data: Pick<ReadyResponse, 'playerMode' | 'publicUrl' | 'serverId'>,
+  item: ReadyItem
+): PlayTarget | undefined {
+  if (item.state !== 'ready') return undefined;
+  if (data.playerMode === 'builtin') {
+    return item.fileId === undefined ? undefined : { internal: true, fileId: item.fileId };
+  }
+  if (!item.itemId) return undefined;
+  return { internal: false, href: jellyfinItemUrl(data.publicUrl, item.itemId, data.serverId) };
 }
 
 /** Deep link to an item's page in the Jellyfin web client. */

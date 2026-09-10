@@ -1,10 +1,12 @@
+<!-- Haro: green shell, two lit eyes, the equator seam and its ear panels.
+     Matches the header mark in web/src/components/Layout.tsx. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="8" fill="#7c3aed" />
-  <path
-    d="M9 8v16M23 8v16M9 16h14"
-    stroke="#fff"
-    stroke-width="3.5"
-    stroke-linecap="round"
-    fill="none"
-  />
+  <rect x="-1" y="9.5" width="7" height="13" rx="3" fill="#1f7f39" />
+  <rect x="26" y="9.5" width="7" height="13" rx="3" fill="#1f7f39" />
+  <circle cx="16" cy="16" r="14" fill="#4bd463" />
+  <path d="M2.7 17.6h26.6" stroke="#111614" stroke-width="2.2" stroke-linecap="round" opacity=".75" />
+  <circle cx="10.6" cy="12.2" r="3.7" fill="#111614" />
+  <circle cx="21.4" cy="12.2" r="3.7" fill="#111614" />
+  <circle cx="10.6" cy="12.2" r="1.9" fill="#f5c33c" />
+  <circle cx="21.4" cy="12.2" r="1.9" fill="#f5c33c" />
 </svg>

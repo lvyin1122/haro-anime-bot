@@ -120,7 +120,7 @@ async function enqueue(
  */
 export async function pollSubscription(
   subscription: Subscription,
-  options: { backfill?: boolean } = {}
+  options: { backfill?: boolean; force?: boolean } = {}
 ): Promise<PollResult> {
   const result: PollResult = {
     subscriptionId: subscription.id,
@@ -155,7 +155,11 @@ export async function pollSubscription(
     for (const resource of ordered) {
       newest = Math.max(newest, new Date(resource.createdAt).getTime());
 
-      if (!subscription.autoDownload) {
+      // `force` is the "download everything now" button: a subscription with
+      // auto-download off is one you want to pick from by hand, but asking for
+      // the back catalogue outright is an explicit instruction that outranks
+      // that preference for this one run.
+      if (!subscription.autoDownload && !options.force) {
         result.skipped++;
         continue;
       }
@@ -163,6 +167,8 @@ export async function pollSubscription(
       else result.skipped++;
     }
 
+    // The cursor means "everything published up to here has been considered",
+    // which is true whether or not anything was queued from it.
     subscriptions.update(subscription.id, {
       lastCheckedAt: Date.now(),
       ...(newest > 0 ? { cursorAt: newest } : {})

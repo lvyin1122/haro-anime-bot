@@ -1,6 +1,6 @@
 import { constants } from 'node:fs';
 import { access, link, mkdir, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, posix } from 'node:path';
+import { dirname, join, posix, resolve, sep } from 'node:path';
 
 import { config } from '../config.ts';
 
@@ -147,4 +147,22 @@ export async function hardlink(source: string, target: string): Promise<void> {
 /** Join path segments that may contain user-supplied folder names. */
 export function libraryPath(...segments: string[]): string {
   return posix.join(config.LIBRARY_ROOT, ...segments);
+}
+
+/**
+ * Resolve `candidate` and assert it stays inside `root`.
+ *
+ * Every path the player serves comes out of `imported_files.library_path`
+ * rather than a request parameter, so nothing today can reach outside the
+ * library. This is the belt to that braces: a row written by an older version,
+ * a hand-edited database or a future endpoint that does take a path all fail
+ * closed here instead of turning into an arbitrary file read.
+ */
+export function resolveWithin(root: string, candidate: string): string {
+  const base = resolve(root);
+  const target = resolve(base, candidate);
+  if (target !== base && !target.startsWith(base.endsWith(sep) ? base : base + sep)) {
+    throw new Error(`Path escapes ${root}: ${candidate}`);
+  }
+  return target;
 }

@@ -1,26 +1,66 @@
-# Development stack: source is bind-mounted, server restarts on change, Vite
-# serves the UI with HMR on :5173 and proxies /api to the server on :3000.
+# Development stack — Haro, qBittorrent and (optionally) Jellyfin, with nothing
+# installed on the host but Docker.
 #
-#   docker compose -f docker-compose.dev.yml up
+#   ./scripts/bootstrap.sh                              # first run: does all of this for you
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml --profile jellyfin up -d
 #   docker compose -f docker-compose.dev.yml run --rm haro-dev pnpm test
 #
-# Using this avoids needing Node 26 on your workstation — `anipar` cannot be
-# imported on Node 22, so tests and typechecks have to run on 26 somewhere.
+# Source is bind-mounted, the server restarts on change, Vite serves the UI
+# with HMR on :7803 and proxies /api to the server on :7802. Running in the
+# container also avoids needing Node 26 on your workstation — `anipar` cannot
+# be imported on Node 22, so tests and typechecks have to run on 26 somewhere.
+#
+# Haro and qBittorrent share ONE named volume, with downloads and the library
+# as directories inside it. That is deliberate and is the one thing this file
+# exists to get right: importing hardlinks the finished file into the library,
+# and a hardlink cannot cross a filesystem — and two named volumes are two
+# filesystems, however identically they are mounted.
+#
+# Jellyfin is opt-in — Haro's built-in player covers watching by default.
+
+name: haro-dev
 
 services:
+  # Named volumes are created root-owned, and every other service here runs as
+  # the developer's own uid so that nothing it writes needs sudo to clean up.
+  # Chown them once before anything else starts.
+  init:
+    image: alpine:3.22
+    container_name: haro-init
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /data/downloads /data/library &&
+        chown -R ${HARO_UID:-1000}:${HARO_GID:-1000} /data /modules
+    volumes:
+      - haro_data:/data
+      - haro_root_modules:/modules/root
+      - haro_server_modules:/modules/server
+      - haro_web_modules:/modules/web
+
   haro-dev:
-    image: node:26-alpine
+    build:
+      context: .
+      target: dev
+    image: haro-anime-bot:dev
     container_name: haro-dev
     working_dir: /app
-    command: sh -c "npm install -g pnpm@11.10.0 && pnpm install && pnpm dev"
+    # Your own uid: the SQLite database and anything a build writes land in the
+    # bind-mounted tree, and root-owned files there are a nuisance to remove.
+    user: '${HARO_UID:-1000}:${HARO_GID:-1000}'
     ports:
-      - '3000:3000' # API
-      - '5173:5173' # Vite dev server (open this one)
+      - '7802:7802' # API
+      - '7803:7803' # Vite dev server (open this one)
     env_file: .env
     environment:
       NODE_ENV: development
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      qbittorrent:
+        condition: service_started
     volumes:
       - .:/app
       # Keep container-built node_modules out of the bind mount so the host's
@@ -28,11 +68,64 @@ services:
       - haro_root_modules:/app/node_modules
       - haro_server_modules:/app/server/node_modules
       - haro_web_modules:/app/web/node_modules
-      - ./data:/config
-      - /srv/downloads/complete:/downloads/complete
-      - /srv/media/anime:/media/anime
+      - ./data/config:/config
+      - haro_data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:7802/api/health/live']
+      interval: 10s
+      timeout: 5s
+      # The very first `up` installs the whole workspace before it listens.
+      start_period: 240s
+      retries: 5
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: haro-qbittorrent
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    environment:
+      PUID: ${HARO_UID:-1000}
+      PGID: ${HARO_GID:-1000}
+      TZ: ${TZ:-Asia/Shanghai}
+      WEBUI_PORT: 7808
+      TORRENTING_PORT: 6881
+    ports:
+      - '7808:7808'
+      - '6881:6881'
+      - '6881:6881/udp'
+    volumes:
+      # Seeded by scripts/bootstrap.sh with a generated WebUI password and the
+      # right port, so there is no random first-run password to dig out of the
+      # container's logs. The password it generated is in .env.
+      - ./data/qbittorrent:/config
+      - haro_data:/data
+    restart: unless-stopped
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: haro-jellyfin
+    # Opt in with:  --profile jellyfin   (or ./scripts/bootstrap.sh --with-jellyfin)
+    profiles: [jellyfin]
+    user: '${HARO_UID:-1000}:${HARO_GID:-1000}'
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    ports:
+      - '8096:8096'
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ./data/jellyfin/config:/config
+      - ./data/jellyfin/cache:/cache
+      # Jellyfin only ever reads the library; Haro is the one writing it.
+      - haro_data:/data:ro
+    restart: unless-stopped
 
 volumes:
   haro_root_modules:
   haro_server_modules:
   haro_web_modules:
+  # Downloads and the library both live in here, as /data/downloads and
+  # /data/library. One volume, so one filesystem, so hardlinks work.
+  haro_data:

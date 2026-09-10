@@ -4,6 +4,7 @@ import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import { useState } from 'react';
 
 import { api, formatRelative } from '../api';
+import { LOCALES, useI18n, useT } from '../i18n';
 import { Button, Card, ErrorNote, Spinner } from '../components/ui';
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -32,6 +33,8 @@ function ServiceLine({ ok, name, detail }: { ok: boolean; name: string; detail: 
 }
 
 export function SettingsPage() {
+  const t = useT();
+  const { locale, setLocale } = useI18n();
   const [results, setResults] = useState<Record<string, { ok: boolean; detail: string }>>({});
 
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 60_000 });
@@ -51,10 +54,11 @@ export function SettingsPage() {
 
   const config = settings.data?.config ?? {};
   const hardlink = health.data?.paths.hardlink;
+  const playerMode = health.data?.playerMode ?? 'builtin';
 
   return (
     <div className="space-y-5">
-      <h1 className="text-lg font-semibold">Settings</h1>
+      <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
 
       {settings.data && settings.data.warnings.length > 0 && (
         <Card className="border-amber-900/60 bg-amber-950/20">
@@ -69,10 +73,35 @@ export function SettingsPage() {
         </Card>
       )}
 
+      <Card>
+        <h2 className="mb-1 text-sm font-semibold">{t('settings.language')}</h2>
+        <p className="mb-3 text-[11px] leading-relaxed text-ink-500">{t('settings.languageHint')}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {LOCALES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => setLocale(option.id)}
+              className={clsx(
+                'rounded-lg border px-3 py-1.5 text-xs font-medium transition',
+                option.id === locale
+                  ? 'border-brand bg-brand/15 text-brand'
+                  : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500 hover:text-ink-100'
+              )}
+            >
+              {option.label}
+              {/* The endonym alone is unreadable in a language you cannot read,
+                  which is exactly the situation someone changing this is in. */}
+              {option.id !== 'en' && <span className="ml-1.5 text-ink-500">{option.english}</span>}
+            </button>
+          ))}
+        </div>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Service status</h2>
+            <h2 className="text-sm font-semibold">{t('settings.serviceStatus')}</h2>
             <Button size="sm" onClick={() => void health.refetch()} disabled={health.isFetching}>
               <RefreshCw className={health.isFetching ? 'size-3 animate-spin' : 'size-3'} />
             </Button>
@@ -85,14 +114,19 @@ export function SettingsPage() {
 
           <div className="mt-3 flex flex-wrap gap-2 border-t border-ink-800 pt-3">
             <Button size="sm" onClick={() => testQb.mutate()} disabled={testQb.isPending}>
-              Test qBittorrent
+              {t('settings.testQbittorrent')}
             </Button>
-            <Button size="sm" onClick={() => testJf.mutate()} disabled={testJf.isPending}>
-              Test Jellyfin
-            </Button>
-            <Button size="sm" onClick={() => rescan.mutate()} disabled={rescan.isPending}>
-              Rescan Jellyfin library
-            </Button>
+            {/* Nothing to test or rescan when Jellyfin is not the player. */}
+            {playerMode === 'jellyfin' && (
+              <>
+                <Button size="sm" onClick={() => testJf.mutate()} disabled={testJf.isPending}>
+                  {t('settings.testJellyfin')}
+                </Button>
+                <Button size="sm" onClick={() => rescan.mutate()} disabled={rescan.isPending}>
+                  {t('settings.rescanJellyfin')}
+                </Button>
+              </>
+            )}
           </div>
 
           {Object.entries(results).map(([key, result]) => (
@@ -111,7 +145,7 @@ export function SettingsPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-2 text-sm font-semibold">Filesystem</h2>
+          <h2 className="mb-2 text-sm font-semibold">{t('settings.filesystem')}</h2>
 
           {hardlink && (
             <div
@@ -126,42 +160,61 @@ export function SettingsPage() {
             </div>
           )}
 
-          <Row label="Downloads (this container)" value={String(config.downloadRoot ?? '—')} />
-          <Row label="Downloads (qBittorrent)" value={String(config.qbDownloadRoot ?? '—')} />
-          <Row label="Jellyfin library" value={String(config.libraryRoot ?? '—')} />
-          <Row label="Data directory" value={String(config.dataDir ?? '—')} />
+          <Row label={t('settings.row.downloadsHere')} value={String(config.downloadRoot ?? '—')} />
+          <Row label={t('settings.row.downloadsQb')} value={String(config.qbDownloadRoot ?? '—')} />
+          <Row label={t('settings.row.library')} value={String(config.libraryRoot ?? '—')} />
+          <Row label={t('settings.row.dataDir')} value={String(config.dataDir ?? '—')} />
 
           {hardlink && !hardlink.sameDevice && (
             <div className="mt-3">
               <ErrorNote>
-                Downloads and library are on different filesystems. Hardlinks cannot cross devices —
-                mount both from one host filesystem in docker-compose.yml.
+                {t('settings.crossDevice')}
               </ErrorNote>
             </div>
           )}
         </Card>
 
         <Card>
-          <h2 className="mb-2 text-sm font-semibold">Configuration</h2>
+          <h2 className="mb-2 text-sm font-semibold">{t('settings.configuration')}</h2>
           <Row label="qBittorrent" value={String(config.qbittorrentUrl ?? '—')} />
-          <Row label="Username" value={String(config.qbittorrentUsername ?? '—')} />
-          <Row label="Password" value={config.qbittorrentPasswordSet ? 'set' : 'not set'} />
-          <Row label="Category" value={String(config.qbittorrentCategory ?? '—')} />
-          <Row label="Jellyfin (server-side)" value={String(config.jellyfinUrl ?? '—')} />
+          <Row label={t('settings.row.username')} value={String(config.qbittorrentUsername ?? '—')} />
+          <Row label={t('settings.row.password')}
+            value={config.qbittorrentPasswordSet ? t('common.set') : t('common.notSet')} />
+          <Row label={t('settings.row.category')} value={String(config.qbittorrentCategory ?? '—')} />
           <Row
-            label="Jellyfin (play links)"
+            label={t('settings.player')}
             value={
-              config.jellyfinPublicUrl
-                ? String(config.jellyfinPublicUrl)
-                : `${window.location.protocol}//${window.location.hostname}:8096 (assumed)`
+              playerMode === 'builtin'
+                ? t('settings.playerBuiltin')
+                : config.playerMode === 'auto'
+                  ? t('settings.playerJellyfinAuto')
+                  : t('settings.playerJellyfin')
             }
           />
-          <Row label="API key" value={config.jellyfinApiKeySet ? 'set' : 'not set'} />
+          {playerMode === 'jellyfin' && (
+            <>
+              <Row label={t('settings.row.jellyfinServer')} value={String(config.jellyfinUrl ?? '—')} />
+              <Row
+                label={t('settings.row.jellyfinLinks')}
+                value={
+                  config.jellyfinPublicUrl
+                    ? String(config.jellyfinPublicUrl)
+                    : t('settings.row.assumed', {
+                        url: `${window.location.protocol}//${window.location.hostname}:8096`
+                      })
+                }
+              />
+              <Row label={t('settings.row.apiKey')}
+                value={config.jellyfinApiKeySet ? t('common.set') : t('common.notSet')} />
+            </>
+          )}
           <Row label="AnimeGarden" value={String(config.animegardenApi ?? '—')} />
           <Row label="Bangumi" value={String(config.bangumiApi ?? '—')} />
-          <Row label="Poll interval" value={`${config.pollIntervalMinutes ?? '—'} min`} />
-          <Row label="Monitor interval" value={`${config.monitorIntervalSeconds ?? '—'} s`} />
-          <Row label="Timezone" value={String(config.timezone ?? '—')} />
+          <Row label={t('settings.row.pollInterval')}
+            value={t('settings.minutes', { count: String(config.pollIntervalMinutes ?? '—') })} />
+          <Row label={t('settings.row.monitorInterval')}
+            value={t('settings.seconds', { count: String(config.monitorIntervalSeconds ?? '—') })} />
+          <Row label={t('settings.row.timezone')} value={String(config.timezone ?? '—')} />
           <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
             These come from environment variables. Edit <code className="text-ink-300">.env</code> on
             the Pi and run <code className="text-ink-300">docker compose up -d</code> to apply.
@@ -169,7 +222,7 @@ export function SettingsPage() {
         </Card>
 
         <Card>
-          <h2 className="mb-2 text-sm font-semibold">Activity</h2>
+          <h2 className="mb-2 text-sm font-semibold">{t('settings.activity')}</h2>
           <div className="max-h-96 space-y-1 overflow-y-auto">
             {events.data?.events.map((event) => (
               <div key={event.id} className="flex gap-2 border-b border-ink-800/50 py-1 last:border-0">
