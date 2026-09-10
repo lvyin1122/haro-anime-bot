@@ -63,8 +63,8 @@ describe('matchEpisode', () => {
 
 describe('itemUrl', () => {
   it('builds a Jellyfin web deep link', () => {
-    expect(itemUrl('http://192.168.3.30:8096', 'abc', 'srv')).toBe(
-      'http://192.168.3.30:8096/web/index.html#/details?id=abc&serverId=srv'
+    expect(itemUrl('http://192.0.2.10:8096', 'abc', 'srv')).toBe(
+      'http://192.0.2.10:8096/web/index.html#/details?id=abc&serverId=srv'
     );
   });
 
