@@ -1,5 +1,6 @@
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { ImageOff } from 'lucide-react';
 
 import type { DownloadStatus } from '../api';
 
@@ -8,6 +9,45 @@ export function Card({ className, children }: { className?: string; children: Re
     <div className={clsx('rounded-xl border border-ink-800 bg-ink-900/60 p-4', className)}>
       {children}
     </div>
+  );
+}
+
+/**
+ * Cover art with a placeholder.
+ *
+ * Bangumi's images are hotlinked and occasionally 404, and a subscription
+ * whose subject has never been fetched has no art at all — both need to leave
+ * a box of the right shape behind rather than collapsing the layout around
+ * them.
+ */
+export function Poster({
+  src,
+  alt,
+  className
+}: {
+  src?: string | null;
+  alt: string;
+  className?: string;
+}) {
+  const [broken, setBroken] = useState(false);
+  const shape = clsx('overflow-hidden rounded-md bg-ink-800', className);
+
+  if (!src || broken) {
+    return (
+      <div className={clsx(shape, 'grid place-items-center')} aria-hidden>
+        <ImageOff className="size-4 text-ink-600" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setBroken(true)}
+      className={clsx(shape, 'object-cover')}
+    />
   );
 }
 

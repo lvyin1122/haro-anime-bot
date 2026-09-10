@@ -4,9 +4,12 @@ import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import { api, formatEpisode, formatRelative } from '../api';
+import { useRelativeTime, useT } from '../i18n';
 import { Badge, Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui';
 
 export function SubscriptionsPage() {
+  const t = useT();
+  const relative = useRelativeTime();
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<string>();
 
@@ -45,7 +48,7 @@ export function SubscriptionsPage() {
         </div>
         <Button onClick={() => scanAll.mutate()} disabled={scanAll.isPending}>
           <RefreshCw className={scanAll.isPending ? 'size-3.5 animate-spin' : 'size-3.5'} />
-          Check now
+          {t('subscriptions.checkNow')}
         </Button>
       </div>
 
@@ -60,11 +63,11 @@ export function SubscriptionsPage() {
 
       {!isPending && list.length === 0 && (
         <EmptyState
-          title="No subscriptions yet"
-          description="Search for an anime or browse the airing calendar, open it, and choose Subscribe."
+          title={t('subscriptions.emptyTitle')}
+          description={t('subscriptions.emptyHint')}
           action={
             <Link to="/search" search={{ q: undefined, tab: 'anime' as const }}>
-              <Button variant="primary">Find an anime</Button>
+              <Button variant="primary">{t('subscriptions.findAnime')}</Button>
             </Link>
           }
         />
@@ -104,7 +107,7 @@ export function SubscriptionsPage() {
                   <span className="font-mono">{subscription.libraryFolder}</span>
                   {' · '}
                   {subscription.lastCheckedAt
-                    ? `checked ${formatRelative(subscription.lastCheckedAt)}`
+                    ? `checked ${relative(subscription.lastCheckedAt)}`
                     : 'never checked'}
                 </div>
               </div>

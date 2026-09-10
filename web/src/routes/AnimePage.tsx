@@ -4,10 +4,13 @@ import { useState } from 'react';
 import { Download, ExternalLink, Rss } from 'lucide-react';
 
 import { api, formatRelative, formatSize, type Resource } from '../api';
+import { useRelativeTime, useT } from '../i18n';
 import { SubscribeDialog } from '../components/SubscribeDialog';
 import { Badge, Button, Card, ErrorNote, Spinner } from '../components/ui';
 
 export function AnimePage() {
+  const t = useT();
+  const relative = useRelativeTime();
   const { subjectId } = useParams({ from: '/anime/$subjectId' });
   const id = Number(subjectId);
   const queryClient = useQueryClient();
@@ -45,7 +48,7 @@ export function AnimePage() {
     onError: (err: Error) => setNotice(`Failed: ${err.message}`)
   });
 
-  if (isPending) return <Spinner label="Loading anime…" />;
+  if (isPending) return <Spinner label={t('search.loading')} />;
   if (error) return <ErrorNote>{(error as Error).message}</ErrorNote>;
   if (!data) return null;
 
@@ -109,7 +112,7 @@ export function AnimePage() {
                     <Rss className="size-3.5" /> Manage subscription
                   </Button>
                 </Link>
-                <Button onClick={() => setDialogOpen(true)}>Edit filter</Button>
+                <Button onClick={() => setDialogOpen(true)}>{t('anime.editFilter')}</Button>
               </>
             ) : (
               <Button variant="primary" onClick={() => setDialogOpen(true)}>
@@ -183,7 +186,7 @@ export function AnimePage() {
                               <Badge key={lang}>{lang}</Badge>
                             ))}
                             <span className="text-[11px] text-ink-500">
-                              {formatSize(resource.size)} · {formatRelative(resource.createdAt)}
+                              {formatSize(resource.size)} · {relative(resource.createdAt)}
                             </span>
                           </div>
                           <div className="break-title text-[11px] leading-snug text-ink-300">
@@ -195,7 +198,7 @@ export function AnimePage() {
                           size="sm"
                           onClick={() => grab.mutate(resource)}
                           disabled={grab.isPending}
-                          title="Send this magnet to qBittorrent"
+                          title={t('anime.grabHint')}
                         >
                           <Download className="size-3" />
                         </Button>
@@ -237,7 +240,7 @@ export function AnimePage() {
             })}
             {episodes.length === 0 && (
               <div className="px-3 py-6 text-center text-xs text-ink-500">
-                Bangumi has no episode list for this subject.
+                {t('anime.noEpisodeList')}
               </div>
             )}
           </Card>

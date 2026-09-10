@@ -9,6 +9,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { Layout } from './components/Layout';
+import { I18nProvider } from './i18n';
 import { AnimePage } from './routes/AnimePage';
 import { CalendarPage } from './routes/CalendarPage';
 import { DashboardPage } from './routes/DashboardPage';
@@ -78,8 +79,10 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <I18nProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </I18nProvider>
   </StrictMode>
 );

@@ -2,18 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import clsx from 'clsx';
 import { useState } from 'react';
-import { History, Pencil, RefreshCw, Trash2 } from 'lucide-react';
+import { DownloadCloud, History, Pencil, RefreshCw, Trash2 } from 'lucide-react';
 
 import {
   api,
   formatEpisode,
-  formatRelative,
   formatSize,
   playTarget,
   type PlayTarget,
   type EpisodeSlot
 } from '../api';
 import { SubscribeDialog } from '../components/SubscribeDialog';
+import { useRelativeTime, useT } from '../i18n';
 import {
   Badge,
   Button,
@@ -83,6 +83,8 @@ function EpisodeCell({ slot, target }: { slot: EpisodeSlot; target?: PlayTarget 
 }
 
 export function SubscriptionPage() {
+  const t = useT();
+  const relative = useRelativeTime();
   const { id } = useParams({ from: '/subscriptions/$id' });
   const subscriptionId = Number(id);
   const queryClient = useQueryClient();
@@ -123,15 +125,22 @@ export function SubscriptionPage() {
   };
 
   const scan = useMutation({
-    mutationFn: (backfill: boolean) => api.scanSubscription(subscriptionId, backfill),
+    mutationFn: (options: { backfill?: boolean; force?: boolean }) =>
+      api.scanSubscription(subscriptionId, options),
     onSuccess: ({ result }) => {
       setNotice(
-        `Found ${result.found} release(s), queued ${result.queued}, skipped ${result.skipped}.` +
-          (result.errors.length ? ` Errors: ${result.errors.join('; ')}` : '')
+        t('subscription.scanResult', {
+          found: result.found,
+          queued: result.queued,
+          skipped: result.skipped
+        }) +
+          (result.errors.length
+            ? t('subscription.scanErrors', { errors: result.errors.join('; ') })
+            : '')
       );
       invalidate();
     },
-    onError: (err: Error) => setNotice(`Scan failed: ${err.message}`)
+    onError: (err: Error) => setNotice(t('subscription.scanFailed', { error: err.message }))
   });
 
   const remove = useMutation({
@@ -199,28 +208,40 @@ export function SubscriptionPage() {
             <Button size="sm">Browse releases</Button>
           </Link>
           <Button size="sm" onClick={() => setEditing(true)}>
-            <Pencil className="size-3" /> Edit
+            <Pencil className="size-3" /> {t('subscription.edit')}
           </Button>
-          <Button size="sm" onClick={() => scan.mutate(false)} disabled={scan.isPending}>
-            <RefreshCw className={scan.isPending ? 'size-3 animate-spin' : 'size-3'} /> Check now
+          <Button size="sm" onClick={() => scan.mutate({})} disabled={scan.isPending}>
+            <RefreshCw className={scan.isPending ? 'size-3 animate-spin' : 'size-3'} />{' '}
+            {t('subscriptions.checkNow')}
           </Button>
           <Button
             size="sm"
-            onClick={() => scan.mutate(true)}
+            onClick={() => scan.mutate({ backfill: true })}
             disabled={scan.isPending}
-            title="Ignore the cursor and re-scan the full history for missing episodes"
+            title={t('subscription.backfillHint')}
           >
-            <History className="size-3" /> Backfill
+            <History className="size-3" /> {t('subscription.backfill')}
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={scan.isPending}
+            title={t('subscription.downloadAllHint')}
+            onClick={() => {
+              // This can hand a whole season to qBittorrent at once, so it
+              // asks first — and says what it will skip.
+              if (confirm(t('subscription.downloadAllConfirm', { title: subscription.title }))) {
+                scan.mutate({ backfill: true, force: true });
+              }
+            }}
+          >
+            <DownloadCloud className="size-3" /> {t('subscription.downloadAll')}
           </Button>
           <Button
             size="sm"
             variant="danger"
             onClick={() => {
-              if (
-                confirm(
-                  `Delete the subscription for “${subscription.title}”?\n\nFiles already in your Jellyfin library are kept.`
-                )
-              ) {
+              if (confirm(t('subscription.deleteConfirm', { title: subscription.title }))) {
                 remove.mutate();
               }
             }}
@@ -285,14 +306,14 @@ export function SubscriptionPage() {
 
       <section className="space-y-2">
         <h2 className="text-sm font-semibold">
-          Downloads <span className="text-ink-500">({downloads.length})</span>
+          {t('subscription.downloads')}{' '}
+          <span className="text-ink-500">({downloads.length})</span>
         </h2>
 
         {downloads.length === 0 && (
           <Card>
             <div className="text-xs text-ink-500">
-              Nothing grabbed yet. Use “Check now” to look for episodes published since the
-              subscription was created, or “Backfill” to scan the full history.
+              {t('subscription.nothingGrabbed')}
             </div>
           </Card>
         )}
@@ -308,12 +329,12 @@ export function SubscriptionPage() {
                       <Badge tone="brand">{formatEpisode(download.episode)}</Badge>
                     )}
                     {download.needsReview && (
-                      <Badge tone="warn" title="Episode number came from the fallback parser">
+                      <Badge tone="warn" title={t('downloads.checkEpisodeHint')}>
                         check episode
                       </Badge>
                     )}
                     <span className="text-[11px] text-ink-500">
-                      {formatSize(download.size)} · {formatRelative(download.addedAt)}
+                      {formatSize(download.size)} · {relative(download.addedAt)}
                     </span>
                   </div>
                   <div className="break-title text-[11px] leading-snug text-ink-300">
@@ -343,7 +364,7 @@ export function SubscriptionPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => reimport.mutate(download.id)}
-                      title="Rewrite the library files and NFOs for this download"
+                      title={t('downloads.reimportHint')}
                     >
                       Re-import
                     </Button>

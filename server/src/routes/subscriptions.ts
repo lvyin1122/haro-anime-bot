@@ -2,7 +2,13 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 import { queryResources } from '../clients/animegarden.ts';
-import { displayTitle, getSubject, mainEpisodes, subjectYear } from '../clients/bangumi.ts';
+import {
+  cachedPoster,
+  displayTitle,
+  getSubject,
+  mainEpisodes,
+  subjectYear
+} from '../clients/bangumi.ts';
 import { downloads, subscriptions } from '../data.ts';
 import { parseRelease, sanitizeName, seriesFolderName } from '../core/naming.ts';
 import { pollSubscription } from '../core/scheduler.ts';
@@ -49,6 +55,7 @@ export const subscriptionRoutes = new Hono()
 
       return {
         ...subscription,
+        poster: cachedPoster(subscription.subjectId) ?? null,
         stats: {
           total: rows.length,
           imported: imported.length,
@@ -234,11 +241,19 @@ export const subscriptionRoutes = new Hono()
     return c.json({ ok: true });
   })
 
-  /** Force a check now, optionally ignoring the cursor to re-scan history. */
+  /**
+   * Force a check now.
+   *
+   * `backfill` ignores the cursor and re-reads the full history; `force` also
+   * queues what it finds even when the subscription has auto-download off,
+   * which together are the "grab every episode that exists" button. Episodes
+   * already downloaded are skipped either way.
+   */
   .post('/:id/scan', async (c) => {
     const subscription = subscriptions.find(Number(c.req.param('id')));
     if (!subscription) return c.json({ error: 'Not found' }, 404);
 
     const backfill = c.req.query('backfill') === 'true';
-    return c.json({ result: await pollSubscription(subscription, { backfill }) });
+    const force = c.req.query('force') === 'true';
+    return c.json({ result: await pollSubscription(subscription, { backfill, force }) });
   });

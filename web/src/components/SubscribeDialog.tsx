@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 
 import { api, formatSize, type Subscription, type SubscriptionFilter } from '../api';
+import { useT } from '../i18n';
 import {
   Badge,
   Button,
@@ -34,6 +35,7 @@ export function SubscribeDialog({
   existing,
   fansubOptions = []
 }: Props) {
+  const t = useT();
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState(suggested.title);
@@ -123,41 +125,35 @@ export function SubscribeDialog({
       open={open}
       onClose={onClose}
       wide
-      title={existing ? `Edit subscription — ${existing.title}` : 'Subscribe'}
+      title={
+        existing ? t('dialog.editTitleWith', { title: existing.title }) : t('dialog.subscribeTitle')
+      }
     >
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-4">
           <div>
-            <Label hint="Used for the Jellyfin series title and episode filenames.">
-              Series title
-            </Label>
+            <Label hint={t('dialog.seriesTitleHint')}>{t('dialog.seriesTitle')}</Label>
             <Input value={title} onChange={setTitle} />
           </div>
 
           <div>
-            <Label hint="Folder created under LIBRARY_ROOT. Convention: Title (Year).">
-              Library folder
-            </Label>
+            <Label hint={t('dialog.libraryFolderHint')}>{t('dialog.libraryFolder')}</Label>
             <Input value={libraryFolder} onChange={setLibraryFolder} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label hint="0 files into Specials.">Season</Label>
+              <Label hint={t('dialog.seasonHint')}>{t('dialog.season')}</Label>
               <Input type="number" min={0} max={99} value={season} onChange={setSeason} />
             </div>
             <div>
-              <Label hint="Subtract from released numbers. Use 12 if a S2 release is numbered 13+.">
-                Episode offset
-              </Label>
+              <Label hint={t('dialog.episodeOffsetHint')}>{t('dialog.episodeOffset')}</Label>
               <Input type="number" value={episodeOffset} onChange={setEpisodeOffset} />
             </div>
           </div>
 
           <div>
-            <Label hint="Pick one to keep episode numbering and quality consistent.">
-              Fansub groups
-            </Label>
+            <Label hint={t('dialog.fansubsHint')}>{t('dialog.fansubs')}</Label>
             <TagInput
               value={filter.fansubs ?? []}
               onChange={(fansubs) => setFilter((f) => ({ ...f, fansubs }))}
@@ -195,7 +191,7 @@ export function SubscribeDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label hint="All must appear in the title.">Require keywords</Label>
+              <Label hint={t('dialog.requireKeywordsHint')}>{t('dialog.requireKeywords')}</Label>
               <TagInput
                 value={filter.keywords ?? []}
                 onChange={(keywords) => setFilter((f) => ({ ...f, keywords }))}
@@ -203,7 +199,7 @@ export function SubscribeDialog({
               />
             </div>
             <div>
-              <Label hint="Any match is rejected.">Exclude</Label>
+              <Label hint={t('dialog.excludeHint')}>{t('dialog.exclude')}</Label>
               <TagInput
                 value={filter.exclude ?? []}
                 onChange={(exclude) => setFilter((f) => ({ ...f, exclude }))}
@@ -219,14 +215,12 @@ export function SubscribeDialog({
               onChange={(event) => setAutoDownload(event.target.checked)}
               className="size-3.5 accent-[var(--color-brand)]"
             />
-            Download new episodes automatically
+            {t('dialog.autoDownload')}
           </label>
 
           {!existing && (
             <div>
-              <Label hint="0 starts from now. Higher values also grab already-published episodes.">
-                Backfill (days)
-              </Label>
+              <Label hint={t('dialog.backfillDaysHint')}>{t('dialog.backfillDays')}</Label>
               <Input type="number" min={0} value={backfillDays} onChange={setBackfillDays} />
             </div>
           )}
@@ -234,9 +228,13 @@ export function SubscribeDialog({
           {error && <ErrorNote>{error}</ErrorNote>}
 
           <div className="flex justify-end gap-2 pt-1">
-            <Button onClick={onClose}>Cancel</Button>
+            <Button onClick={onClose}>{t('common.cancel')}</Button>
             <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>
-              {save.isPending ? 'Saving…' : existing ? 'Save changes' : 'Subscribe'}
+              {save.isPending
+                ? t('dialog.saving')
+                : existing
+                  ? t('dialog.saveChanges')
+                  : t('dialog.subscribeTitle')}
             </Button>
           </div>
         </div>
@@ -244,22 +242,24 @@ export function SubscribeDialog({
         {/* Live preview: the filter is only trustworthy if you can see what it picks up. */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="text-xs font-medium text-ink-300">Matching releases</div>
+            <div className="text-xs font-medium text-ink-300">{t('dialog.preview')}</div>
             {result && (
               <div className="flex items-center gap-1.5">
-                <Badge tone={result.total > 0 ? 'brand' : 'warn'}>{result.total} total</Badge>
+                <Badge tone={result.total > 0 ? 'brand' : 'warn'}>
+                  {t('dialog.total', { count: result.total })}
+                </Badge>
                 {episodeSummary && <Badge tone="success">{episodeSummary}</Badge>}
-                {result.unparsed > 0 && <Badge tone="warn">{result.unparsed} unparsed</Badge>}
+                {result.unparsed > 0 && <Badge tone="warn">{t('dialog.unparsed', { count: result.unparsed })}</Badge>}
               </div>
             )}
           </div>
 
           <div className="h-[26rem] overflow-y-auto rounded-lg border border-ink-800 bg-ink-950/50 p-2">
-            {preview.isPending && <Spinner label="Checking AnimeGarden…" />}
+            {preview.isPending && <Spinner label={t('dialog.checking')} />}
             {preview.isError && <ErrorNote>{(preview.error as Error).message}</ErrorNote>}
             {result && result.matches.length === 0 && (
               <div className="p-4 text-center text-xs text-ink-500">
-                Nothing matches this filter. Try removing a keyword or fansub.
+                {t('dialog.noMatches')}
               </div>
             )}
             {result?.matches.map((match, index) => (
@@ -274,7 +274,7 @@ export function SubscribeDialog({
                     <Badge tone="warn">no episode</Badge>
                   )}
                   {match.lowConfidence && (
-                    <Badge tone="warn" title="Episode number came from the fallback parser">
+                    <Badge tone="warn" title={t('downloads.checkEpisodeHint')}>
                       guessed
                     </Badge>
                   )}

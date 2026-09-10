@@ -4,11 +4,13 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { api, formatEpisode, type ReadyItem } from '../api';
+import { useT } from '../i18n';
 import { browserCapabilities } from '../components/player/capabilities';
 import { Player } from '../components/player/Player';
 import { Badge, Button, Card, ErrorNote, Spinner } from '../components/ui';
 
 export function WatchPage() {
+  const t = useT();
   const { fileId } = useParams({ from: '/watch/$fileId' });
   const id = Number(fileId);
   const navigate = useNavigate();
@@ -51,7 +53,7 @@ export function WatchPage() {
   if (playback.isPending) {
     return (
       <Card>
-        <Spinner label="Working out how to play this…" />
+        <Spinner label={t('watch.preparing')} />
       </Card>
     );
   }
@@ -61,11 +63,10 @@ export function WatchPage() {
       <div className="space-y-4">
         <BackLink />
         <ErrorNote>
-          {playback.error instanceof Error ? playback.error.message : 'Could not open this episode.'}
+          {playback.error instanceof Error ? playback.error.message : t('watch.failed')}
         </ErrorNote>
         <p className="text-xs text-ink-500">
-          The file is still on disk — this only means Haro could not read it. Check that ffmpeg is
-          installed in the container and that the library path in Settings is right.
+          {t('watch.failedHint')}
         </p>
       </div>
     );
@@ -87,7 +88,7 @@ export function WatchPage() {
                 {info.width}×{info.height}
               </span>
             )}
-            {info.resume.played && <Badge tone="success">watched</Badge>}
+            {info.resume.played && <Badge tone="success">{t('common.watched')}</Badge>}
           </div>
         </div>
 
@@ -95,7 +96,7 @@ export function WatchPage() {
           <Link to="/subscriptions/$id" params={{ id: String(info.subscriptionId) }}>
             <Button variant="ghost" size="sm">
               <ExternalLink className="size-3.5" />
-              All episodes
+              {t('watch.allEpisodes')}
             </Button>
           </Link>
         )}
@@ -118,8 +119,8 @@ export function WatchPage() {
         <Card className="text-xs text-ink-500">
           <div className="mb-1 font-medium text-ink-300">
             {info.delivery === 'transcode'
-              ? 'This episode is being re-encoded as it plays'
-              : 'This episode is being repackaged as it plays'}
+              ? t('watch.transcodingTitle')
+              : t('watch.remuxingTitle')}
           </div>
           <ul className="list-inside list-disc space-y-0.5">
             {info.reasons.map((reason) => (
@@ -128,25 +129,26 @@ export function WatchPage() {
           </ul>
           {info.delivery === 'transcode' && (
             <p className="mt-2">
-              Re-encoding costs real CPU. On a Raspberry Pi expect it to struggle with 1080p; a
-              release your browser can decode directly will always play better.
+              {t('watch.transcodingCost')}
             </p>
           )}
         </Card>
       )}
 
       <details className="text-xs text-ink-500">
-        <summary className="cursor-pointer select-none hover:text-ink-300">Keyboard shortcuts</summary>
+        <summary className="cursor-pointer select-none hover:text-ink-300">
+          {t('watch.shortcuts')}
+        </summary>
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 font-mono">
           {[
-            ['space / k', 'play or pause'],
-            ['← / →', 'back or forward 5s'],
-            ['shift + ← / →', 'back or forward 10s'],
-            ['↑ / ↓', 'volume'],
-            ['m', 'mute'],
-            ['c', 'subtitles on or off'],
-            ['[ / ]', 'slower or faster'],
-            ['f', 'fullscreen']
+            ['space / k', t('watch.shortcut.playPause')],
+            ['← / →', t('watch.shortcut.seek5')],
+            ['shift + ← / →', t('watch.shortcut.seek10')],
+            ['↑ / ↓', t('watch.shortcut.volume')],
+            ['m', t('watch.shortcut.mute')],
+            ['c', t('watch.shortcut.subtitles')],
+            ['[ / ]', t('watch.shortcut.speed')],
+            ['f', t('watch.shortcut.fullscreen')]
           ].map(([keys, meaning]) => (
             <div key={keys} className="contents">
               <dt className="text-ink-300">{keys}</dt>
@@ -160,10 +162,11 @@ export function WatchPage() {
 }
 
 function BackLink() {
+  const t = useT();
   return (
     <Link to="/library" className="inline-flex items-center gap-1 text-xs text-ink-500 hover:text-ink-300">
       <ArrowLeft className="size-3.5" />
-      Library
+      {t('watch.back')}
     </Link>
   );
 }

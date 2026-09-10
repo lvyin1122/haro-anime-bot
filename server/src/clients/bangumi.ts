@@ -197,6 +197,19 @@ export async function getSubject(subjectId: number, force = false): Promise<Cach
 }
 
 /** Main-story episodes only, in broadcast order. */
+/**
+ * Cover art for a subject we have already cached, or undefined.
+ *
+ * Deliberately cache-only and never a fetch: this is called once per row when
+ * listing subscriptions, and a list endpoint that fans out to bgm.tv would be
+ * both slow and rude to a community-run service. A subscription with no cached
+ * subject yet simply shows no art until something visits its detail page.
+ */
+export function cachedPoster(subjectId: number): string | undefined {
+  const images = readCache(subjectId)?.images;
+  return images?.common ?? images?.large ?? images?.medium;
+}
+
 export function mainEpisodes(subject: CachedSubject): BangumiEpisode[] {
   return subject.episodes.filter((e) => e.type === 0).sort((a, b) => a.sort - b.sort);
 }

@@ -7,11 +7,11 @@ import { useState } from 'react';
 import {
   api,
   formatEpisode,
-  formatRelative,
   jellyfinItemUrl,
   type ReadyItem,
   type ReadyResponse
 } from '../api';
+import { useRelativeTime, useT } from '../i18n';
 import { Badge, Button, Card, EmptyState, ErrorNote, Spinner } from './ui';
 
 /** "Resume" only once you are far enough in for it to be worth saying. */
@@ -32,7 +32,8 @@ function PlayButton({
   data: ReadyResponse;
   size?: 'sm' | 'md';
 }) {
-  const label = isPartlyWatched(item) ? 'Resume' : 'Play';
+  const t = useT();
+  const label = isPartlyWatched(item) ? t('common.resume') : t('common.play');
 
   if (item.state !== 'ready') {
     return (
@@ -40,12 +41,12 @@ function PlayButton({
         tone="warn"
         title={
           data.playerMode === 'builtin'
-            ? 'The database has this episode, but the file is not where it was imported to.'
-            : 'The file is in your library; Jellyfin has not indexed it yet.'
+            ? t('ready.tooltipFileMissing')
+            : t('ready.tooltipPendingScan')
         }
       >
         <Clock className="mr-1 size-3" />
-        {data.playerMode === 'builtin' ? 'file missing' : 'pending scan'}
+        {data.playerMode === 'builtin' ? t('ready.badgeFileMissing') : t('ready.badgePendingScan')}
       </Badge>
     );
   }
@@ -65,9 +66,9 @@ function PlayButton({
 
   if (!item.itemId) {
     return (
-      <Badge tone="warn" title="The file is in your library; Jellyfin has not indexed it yet.">
+      <Badge tone="warn" title={t('ready.tooltipPendingScan')}>
         <Clock className="mr-1 size-3" />
-        pending scan
+        {t('ready.badgePendingScan')}
       </Badge>
     );
   }
@@ -83,6 +84,8 @@ function PlayButton({
 }
 
 export function ReadyRow({ item, data }: { item: ReadyItem; data: ReadyResponse }) {
+  const t = useT();
+  const relative = useRelativeTime();
   return (
     <Card className="py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -93,16 +96,16 @@ export function ReadyRow({ item, data }: { item: ReadyItem; data: ReadyResponse 
               {formatEpisode(item.episode)}
             </Badge>
             {item.played ? (
-              <Badge tone="neutral" title="Already watched">
+              <Badge tone="neutral" title={t('common.watched')}>
                 <CheckCircle2 className="mr-1 size-3" />
-                watched
+                {t('common.watched')}
               </Badge>
             ) : (
-              <Badge tone="success">new</Badge>
+              <Badge tone="success">{t('common.new')}</Badge>
             )}
             {item.importedAt && (
               <span className="text-[11px] text-ink-500">
-                added {formatRelative(item.importedAt)}
+                {t('ready.addedAt', { when: relative(item.importedAt) })}
               </span>
             )}
           </div>
@@ -148,6 +151,8 @@ export function ReadyToWatch({
   limit?: number;
   compact?: boolean;
 }) {
+  const t = useT();
+  const relative = useRelativeTime();
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<string>();
   const [showWatched, setShowWatched] = useState(false);
@@ -169,7 +174,7 @@ export function ReadyToWatch({
     onError: (err: Error) => setNotice(err.message)
   });
 
-  if (isPending) return <Spinner label="Checking your library…" />;
+  if (isPending) return <Spinner label={t('ready.checking')} />;
   if (error) return <ErrorNote>{(error as Error).message}</ErrorNote>;
   if (!data) return null;
 
@@ -183,18 +188,22 @@ export function ReadyToWatch({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold">Ready to watch</h2>
-          {unwatched.length > 0 && <Badge tone="success">{unwatched.length} new</Badge>}
+          <h2 className="text-sm font-semibold">{t('ready.title')}</h2>
+          {unwatched.length > 0 && (
+            <Badge tone="success">{t('ready.newCount', { count: unwatched.length })}</Badge>
+          )}
           {pending > 0 && (
             <Badge
               tone="warn"
               title={
                 data.playerMode === 'builtin'
-                  ? 'Imported, but the file is no longer at the recorded path'
-                  : 'Imported but not yet indexed by Jellyfin'
+                  ? t('ready.missingHint')
+                  : t('ready.pendingScanHint')
               }
             >
-              {pending} {data.playerMode === 'builtin' ? 'missing' : 'pending scan'}
+              {data.playerMode === 'builtin'
+                ? t('ready.missing', { count: pending })
+                : t('ready.pendingScan', { count: pending })}
             </Badge>
           )}
         </div>
@@ -205,12 +214,14 @@ export function ReadyToWatch({
               onClick={() => setShowWatched((value) => !value)}
               className="text-[11px] text-ink-500 hover:text-ink-300"
             >
-              {showWatched ? 'Hide watched' : `Show watched (${all.length - unwatched.length})`}
+              {showWatched
+                ? t('ready.hideWatched')
+                : t('ready.showWatched', { count: all.length - unwatched.length })}
             </button>
           )}
           {compact ? (
             <Link to="/library" className="text-xs text-brand hover:underline">
-              See all →
+              {t('common.seeAll')}
             </Link>
           ) : (
             // Only Jellyfin needs telling that a file appeared; the built-in
@@ -218,7 +229,7 @@ export function ReadyToWatch({
             data.playerMode === 'jellyfin' && (
               <Button size="sm" onClick={() => rescan.mutate()} disabled={rescan.isPending}>
                 <RefreshCw className={clsx('size-3', rescan.isPending && 'animate-spin')} />
-                Rescan Jellyfin
+                {t('ready.rescan')}
               </Button>
             )
           )}
@@ -235,18 +246,15 @@ export function ReadyToWatch({
 
       {data.playerMode === 'jellyfin' && !data.jellyfinConfigured && (
         <ErrorNote>
-          Set JELLYFIN_API_KEY and JELLYFIN_USER_ID to link imported episodes to Jellyfin, or set
-          PLAYER_MODE=builtin to watch them here. The files are in your library either way.
+          {t('ready.jellyfinUnconfigured')}
         </ErrorNote>
       )}
 
       {shown.length === 0 && (
         <EmptyState
-          title={all.length === 0 ? 'Nothing in your library yet' : 'All caught up'}
+          title={all.length === 0 ? t('ready.emptyTitle') : t('ready.caughtUp')}
           description={
-            all.length === 0
-              ? 'Once a subscription downloads an episode and files it into your library, it shows up here with a play button.'
-              : 'Every downloaded episode has been watched.'
+            all.length === 0 ? t('ready.emptyHint') : t('ready.caughtUpHint')
           }
         />
       )}

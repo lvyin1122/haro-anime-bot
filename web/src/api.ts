@@ -82,6 +82,8 @@ export interface Subscription {
   lastCheckedAt?: number;
   cursorAt?: number;
   createdAt: number;
+  /** Cover art from the cached Bangumi subject, if one has been fetched. */
+  poster?: string | null;
   stats?: {
     total: number;
     imported: number;
@@ -378,9 +380,15 @@ export const api = {
   deleteSubscription: (id: number) =>
     request<{ ok: true }>(`/subscriptions/${id}`, { method: 'DELETE' }),
 
-  scanSubscription: (id: number, backfill = false) =>
+  /**
+   * Check a subscription now.
+   *
+   * `backfill` re-reads the full history instead of only what is new;
+   * `force` queues what it finds even when auto-download is off.
+   */
+  scanSubscription: (id: number, options: { backfill?: boolean; force?: boolean } = {}) =>
     request<{ result: { found: number; queued: number; skipped: number; errors: string[] } }>(
-      `/subscriptions/${id}/scan?backfill=${backfill}`,
+      `/subscriptions/${id}/scan?backfill=${options.backfill ?? false}&force=${options.force ?? false}`,
       { method: 'POST' }
     ),
 
@@ -473,12 +481,25 @@ export const api = {
 
 // --- formatting helpers ----------------------------------------------------
 
-/** AnimeGarden reports sizes in KB. */
-export function formatSize(kb?: number): string {
-  if (!kb || kb <= 0) return '—';
-  if (kb < 1024) return `${Math.round(kb)} KB`;
-  if (kb < 1024 * 1024) return `${(kb / 1024).toFixed(1)} MB`;
-  return `${(kb / 1024 / 1024).toFixed(2)} GB`;
+/**
+ * AnimeGarden reports sizes in **bytes**, and so does qBittorrent.
+ *
+ * This used to read them as kilobytes, which multiplied every size on the
+ * screen by 1024 — a 400MB episode was shown as 400GB. Sizes are the one
+ * number here nobody double-checks, so it stayed wrong for a while.
+ */
+export function formatSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return '—';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  // Bytes and kilobytes are never interesting to a decimal place.
+  return `${value.toFixed(unit <= 1 ? 0 : value >= 100 ? 0 : 1)} ${units[unit]}`;
 }
 
 export function formatRelative(value: string | number): string {

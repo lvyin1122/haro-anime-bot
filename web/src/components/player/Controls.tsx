@@ -14,14 +14,15 @@ import {
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 import type { AudioTrack, Delivery, SubtitleTrack } from '../../api';
+import { useT, type TranslationKey } from '../../i18n';
 
 export const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3];
 export const SUBTITLE_SCALES = [0.75, 1, 1.25, 1.5, 2];
 
-const DELIVERY_LABEL: Record<Delivery, string> = {
-  direct: 'Direct play',
-  remux: 'Repackaging',
-  transcode: 'Transcoding'
+const DELIVERY_LABEL: Record<Delivery, TranslationKey> = {
+  direct: 'player.delivery.direct',
+  remux: 'player.delivery.remux',
+  transcode: 'player.delivery.transcode'
 };
 
 export function formatTime(seconds: number): string {
@@ -174,6 +175,7 @@ export interface ControlsProps {
 }
 
 export function Controls(props: ControlsProps) {
+  const t = useT();
   const {
     playing,
     currentTime,
@@ -221,7 +223,7 @@ export function Controls(props: ControlsProps) {
           max={Math.max(duration, 0.1)}
           step={0.1}
           value={Math.min(currentTime, duration || 0)}
-          aria-label="Seek"
+          aria-label={t('player.seek')}
           onChange={(event) => props.onSeek(Number(event.target.value))}
           className="absolute inset-x-0 top-1/2 h-6 w-full -translate-y-1/2 cursor-pointer appearance-none bg-transparent
                      [&::-webkit-slider-thumb]:size-3 [&::-webkit-slider-thumb]:appearance-none
@@ -233,18 +235,18 @@ export function Controls(props: ControlsProps) {
       </div>
 
       <div className="flex items-center gap-1">
-        <ControlButton label={playing ? 'Pause' : 'Play'} onClick={props.onTogglePlay}>
+        <ControlButton label={playing ? t('player.pause') : t('player.play')} onClick={props.onTogglePlay}>
           {playing ? <Pause className="size-5" /> : <Play className="size-5" />}
         </ControlButton>
 
         {hasNext && (
-          <ControlButton label="Next episode" onClick={props.onNext}>
+          <ControlButton label={t('player.next')} onClick={props.onNext}>
             <SkipForward className="size-4.5" />
           </ControlButton>
         )}
 
         <div className="group/vol flex items-center">
-          <ControlButton label={muted ? 'Unmute' : 'Mute'} onClick={props.onToggleMute}>
+          <ControlButton label={muted ? t('player.unmute') : t('player.mute')} onClick={props.onToggleMute}>
             {muted || volume === 0 ? <VolumeX className="size-4.5" /> : <Volume2 className="size-4.5" />}
           </ControlButton>
           <input
@@ -253,7 +255,7 @@ export function Controls(props: ControlsProps) {
             max={1}
             step={0.01}
             value={muted ? 0 : volume}
-            aria-label="Volume"
+            aria-label={t('player.volume')}
             onChange={(event) => props.onVolume(Number(event.target.value))}
             className="h-1 w-0 cursor-pointer appearance-none rounded-full bg-white/25 opacity-0 transition-all
                        group-hover/vol:mr-2 group-hover/vol:w-20 group-hover/vol:opacity-100
@@ -272,7 +274,7 @@ export function Controls(props: ControlsProps) {
         <div className="flex-1" />
 
         <span
-          title={reasons.length > 0 ? reasons.join('\n') : 'Played straight from the file'}
+          title={reasons.length > 0 ? reasons.join('\n') : t('player.deliveryHint')}
           className={clsx(
             'mr-1 hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium sm:inline-flex',
             delivery === 'direct' && 'bg-brand/15 text-brand',
@@ -280,14 +282,14 @@ export function Controls(props: ControlsProps) {
             delivery === 'transcode' && 'bg-eye/15 text-eye'
           )}
         >
-          {DELIVERY_LABEL[delivery]}
+          {t(DELIVERY_LABEL[delivery])}
         </span>
 
         {audioTracks.length > 1 && (
-          <Menu icon={<Volume2 className="size-4.5" />} label="Audio track">
+          <Menu icon={<Volume2 className="size-4.5" />} label={t('player.audioTrack')}>
             {(close) => (
               <>
-                <MenuHeading>Audio</MenuHeading>
+                <MenuHeading>{t('player.audio')}</MenuHeading>
                 {audioTracks.map((audio) => (
                   <MenuItem
                     key={audio.index}
@@ -308,12 +310,12 @@ export function Controls(props: ControlsProps) {
 
         <Menu
           icon={<Captions className="size-4.5" />}
-          label="Subtitles"
+          label={t('player.subtitles')}
           active={selectedSubtitle !== null}
         >
           {(close) => (
             <>
-              <MenuHeading>Subtitles</MenuHeading>
+              <MenuHeading>{t('player.subtitles')}</MenuHeading>
               <MenuItem
                 selected={selectedSubtitle === null}
                 onClick={() => {
@@ -321,7 +323,7 @@ export function Controls(props: ControlsProps) {
                   close();
                 }}
               >
-                Off
+                {t('player.subtitlesOff')}
               </MenuItem>
               {subtitleTracks.map((subtitle) => (
                 <MenuItem
@@ -333,17 +335,17 @@ export function Controls(props: ControlsProps) {
                   }}
                 >
                   {subtitle.label}
-                  {subtitle.forced ? ' · forced' : ''}
+                  {subtitle.forced ? ` · ${t('player.forced')}` : ''}
                 </MenuItem>
               ))}
               {subtitleTracks.length === 0 && (
                 <div className="px-2.5 py-1.5 text-xs text-ink-500">
-                  This release has no text subtitles.
+                  {t('player.noSubtitles')}
                 </div>
               )}
               {subtitleTracks.length > 0 && (
                 <>
-                  <MenuHeading>Size</MenuHeading>
+                  <MenuHeading>{t('player.subtitleSize')}</MenuHeading>
                   <div className="flex gap-1 px-1.5 pb-1">
                     {SUBTITLE_SCALES.map((scale) => (
                       <button
@@ -367,10 +369,10 @@ export function Controls(props: ControlsProps) {
           )}
         </Menu>
 
-        <Menu icon={<Gauge className="size-4.5" />} label="Playback speed" active={speed !== 1}>
+        <Menu icon={<Gauge className="size-4.5" />} label={t('player.speed')} active={speed !== 1}>
           {(close) => (
             <>
-              <MenuHeading>Speed</MenuHeading>
+              <MenuHeading>{t('player.speed')}</MenuHeading>
               {SPEEDS.map((value) => (
                 <MenuItem
                   key={value}
@@ -380,19 +382,19 @@ export function Controls(props: ControlsProps) {
                     close();
                   }}
                 >
-                  {value === 1 ? 'Normal' : `${value}×`}
+                  {value === 1 ? t('player.speedNormal') : `${value}×`}
                 </MenuItem>
               ))}
             </>
           )}
         </Menu>
 
-        <ControlButton label="Picture in picture" onClick={props.onPictureInPicture}>
+        <ControlButton label={t('player.pip')} onClick={props.onPictureInPicture}>
           <PictureInPicture2 className="size-4.5" />
         </ControlButton>
 
         <ControlButton
-          label={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          label={fullscreen ? t('player.exitFullscreen') : t('player.fullscreen')}
           onClick={props.onToggleFullscreen}
         >
           {fullscreen ? <Minimize className="size-4.5" /> : <Maximize className="size-4.5" />}

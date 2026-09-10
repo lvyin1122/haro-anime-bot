@@ -12,16 +12,21 @@ import {
 } from 'lucide-react';
 
 import { api } from '../api';
+import { useT, type TranslationKey } from '../i18n';
 
-const NAV = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/search', label: 'Search', icon: Search },
-  { to: '/calendar', label: 'Airing', icon: CalendarDays },
-  { to: '/subscriptions', label: 'Subscriptions', icon: Rss },
-  { to: '/library', label: 'Library', icon: PlayCircle },
-  { to: '/downloads', label: 'Downloads', icon: Download },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon }
-] as const;
+const NAV: ReadonlyArray<{
+  to: string;
+  labelKey: TranslationKey;
+  icon: typeof LayoutDashboard;
+}> = [
+  { to: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { to: '/search', labelKey: 'nav.search', icon: Search },
+  { to: '/calendar', labelKey: 'nav.calendar', icon: CalendarDays },
+  { to: '/subscriptions', labelKey: 'nav.subscriptions', icon: Rss },
+  { to: '/library', labelKey: 'nav.library', icon: PlayCircle },
+  { to: '/downloads', labelKey: 'nav.downloads', icon: Download },
+  { to: '/settings', labelKey: 'nav.settings', icon: SettingsIcon }
+];
 
 /**
  * Haro: a green sphere with two lit eyes, a seam across the middle and ear
@@ -51,6 +56,7 @@ function HaroMark({ className }: { className?: string }) {
 }
 
 export function Layout() {
+  const t = useT();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
 
   // Drives the header dot; a slow poll is enough to notice qBittorrent dying.
@@ -81,7 +87,7 @@ export function Layout() {
           </Link>
 
           <nav className="flex flex-1 items-center gap-0.5 overflow-x-auto">
-            {NAV.map(({ to, label, icon: Icon }) => {
+            {NAV.map(({ to, labelKey, icon: Icon }) => {
               const active = to === '/' ? pathname === '/' : pathname.startsWith(to);
               return (
                 <Link
@@ -95,9 +101,9 @@ export function Layout() {
                   )}
                 >
                   <Icon className="size-3.5" />
-                  <span className="hidden md:block">{label}</span>
+                  <span className="hidden md:block">{t(labelKey)}</span>
                   {to === '/library' && unwatched > 0 && (
-                    <span className="rounded-full bg-brand px-1.5 text-[10px] font-semibold text-white">
+                    <span className="rounded-full bg-brand px-1.5 text-[10px] font-semibold text-ink-950">
                       {unwatched}
                     </span>
                   )}
@@ -111,7 +117,7 @@ export function Layout() {
             title={
               health.data
                 ? health.data.services.map((s) => `${s.name}: ${s.detail}`).join('\n')
-                : 'Checking services…'
+                : t('health.checking')
             }
             className="flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] text-ink-500 hover:bg-ink-900"
           >
@@ -122,7 +128,11 @@ export function Layout() {
               )}
             />
             <span className="hidden lg:block">
-              {!health.data ? 'checking' : degraded ? 'degraded' : 'healthy'}
+              {!health.data
+                ? t('health.checking')
+                : degraded
+                  ? t('health.degraded')
+                  : t('health.ok')}
             </span>
           </Link>
         </div>

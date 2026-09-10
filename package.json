@@ -12,7 +12,7 @@
     "dev": "pnpm --parallel --filter @haro/server --filter @haro/web dev",
     "build": "pnpm --filter @haro/web build && pnpm --filter @haro/server build",
     "start": "pnpm --filter @haro/server start",
-    "test": "pnpm --filter ./server test",
+    "test": "pnpm --recursive test",
     "typecheck": "pnpm --recursive typecheck"
   }
 }

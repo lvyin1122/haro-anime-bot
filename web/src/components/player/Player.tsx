@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, beaconProgress, type PlaybackInfo } from '../../api';
+import { useT } from '../../i18n';
 import { Controls, SPEEDS } from './Controls';
 import { SubtitleOverlay } from './SubtitleOverlay';
 
@@ -22,6 +23,7 @@ export function Player({
   onNext?: () => void;
   hasNext: boolean;
 }) {
+  const t = useT();
   const videoRef = useRef<HTMLVideoElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
@@ -70,7 +72,7 @@ export function Player({
     void (async () => {
       const { default: Hls } = await import('hls.js');
       if (cancelled || !Hls.isSupported()) {
-        if (!cancelled) setError('This browser cannot play streamed video.');
+        if (!cancelled) setError(t('player.unsupported'));
         return;
       }
       const instance = new Hls({
@@ -306,7 +308,7 @@ export function Player({
           if (hasNext) onNext?.();
         }}
         onError={() =>
-          setError('The browser rejected this stream. Check the Haro log for ffmpeg errors.')
+          setError(t('player.streamRejected'))
         }
       />
 
