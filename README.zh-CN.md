@@ -214,7 +214,8 @@ docker compose pull && docker compose up -d
 ```
 
 镜像是公开的，不需要登录。它由 `.github/workflows/docker.yml` 在每次推送到 `main` 时构建，
-并发布 `linux/amd64` 与 `linux/arm64` 两个架构。
+并发布 `linux/amd64` 与 `linux/arm64` 两个架构 —— 每个架构都在对应架构的 runner 上原生构建，
+因为用模拟的方式跑 Node 工具链慢到不具可行性。
 
 ### 在树莓派上运行
 

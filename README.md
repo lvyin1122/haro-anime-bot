@@ -231,7 +231,8 @@ docker compose pull && docker compose up -d
 ```
 
 The image is public, so that needs no login. It is published for `linux/amd64` and `linux/arm64`
-by `.github/workflows/docker.yml` on every push to `main`.
+by `.github/workflows/docker.yml` on every push to `main` — each architecture built on a runner of
+that architecture, because emulating a Node toolchain is slow enough to be impractical.
 
 ### Running on a Raspberry Pi
 
