@@ -69,7 +69,11 @@ jobs:
       - name: Export the digest
         run: |
           mkdir -p /tmp/digests
-          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+          # Strip the "sha256:" prefix: upload-artifact rejects a colon in a
+          # filename (it is invalid on Windows), and the merge job puts the
+          # prefix back when it builds the reference.
+          digest='${{ steps.build.outputs.digest }}'
+          touch "/tmp/digests/${digest#sha256:}"
 
       - uses: actions/upload-artifact@v4
         with:
