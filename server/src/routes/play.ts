@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { config } from '../config.ts';
 import { downloads, importedFiles, playbackProgress, subscriptions } from '../data.ts';
 import type { ImportedFile } from '../data.ts';
+import type { Priority } from '../core/ffmpeg.ts';
 import {
   extractAttachment,
   extractSubtitle,
@@ -17,6 +18,7 @@ import {
   type ProbedFile
 } from '../core/ffmpeg.ts';
 import { resolveWithin } from '../core/paths.ts';
+import { pruneCache, readAhead, segmentWithCache } from '../core/segmentCache.ts';
 import {
   attachmentStreams,
   audioStreams,
@@ -299,7 +301,13 @@ export const playRoutes = new Hono()
     }
   })
 
-  /** One segment, produced on demand. No session, no temp files, no cleanup. */
+  /**
+   * One segment.
+   *
+   * Served from the cache when it is there, and generated otherwise — after
+   * which the next few are prepared in the background, so a player working
+   * forwards stops waiting on ffmpeg entirely after the first one.
+   */
   .get('/:fileId/hls/:segment{[0-9]+\\.m4s}', async (c) => {
     const prepared = await prepare(c.req.param('fileId'), c.req.query());
     if ('error' in prepared) return c.json({ error: prepared.error }, prepared.status);
@@ -309,11 +317,27 @@ export const playRoutes = new Hono()
     const segment = segments[index];
     if (!segment) return c.json({ error: 'No such segment' }, 404);
 
+    const key = planKey(plan, capsRaw);
+    const build = (at: number, priority: Priority) => {
+      const target = segments[at];
+      if (!target) return Promise.reject(new Error(`No such segment ${at}`));
+      return mediaSegment(path, plan, target, `${file.id}:${key}`, priority);
+    };
+
     try {
-      const body = await mediaSegment(path, plan, segment, `${file.id}:${planKey(plan, capsRaw)}`);
+      // The segment being asked for is what playback is waiting on; the ones
+      // after it are a guess, and must never delay the real thing.
+      const body = await segmentWithCache(file.id, key, index, () =>
+        build(index, 'interactive')
+      );
+      readAhead(file.id, key, index, segments.length, (at) => build(at, 'background'));
+      void pruneCache();
+
       return c.body(toArrayBuffer(body), 200, {
         'Content-Type': 'video/iso.segment',
-        'Cache-Control': 'private, max-age=3600'
+        // Immutable in practice: the same plan and index always produce the
+        // same bytes, so a re-seek should never come back to the server.
+        'Cache-Control': 'private, max-age=86400, immutable'
       });
     } catch (error) {
       return c.json({ error: errorMessage(error) }, 502);

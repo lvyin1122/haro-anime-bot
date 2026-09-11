@@ -7,7 +7,7 @@
  */
 import { spawn } from 'node:child_process';
 import { readFile, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { availableParallelism, tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { config } from '../config.ts';
@@ -37,29 +37,64 @@ export class FfmpegError extends Error {}
 /**
  * How many ffmpeg processes may run at once.
  *
- * hls.js prefetches a segment or two ahead, and a second viewer doubles that.
- * Three keeps a transcode responsive without letting the box thrash; anything
- * over the limit waits rather than being refused, because the player has no
- * useful way to retry.
+ * Segments are now generated ahead of playback rather than in front of it, so
+ * this sets how fast the cache can fill — but each ffmpeg is itself
+ * multi-threaded, and running more of them than the box can feed makes every
+ * one of them slower. Half the available cores, bounded at both ends: two on a
+ * Raspberry Pi, a handful on a desktop. Work over the limit waits rather than
+ * being refused, because a player has no useful way to retry.
  */
-const MAX_CONCURRENT = 3;
+const MAX_CONCURRENT = Math.max(2, Math.min(6, Math.floor(availableParallelism() / 2)));
 /** Refuse to buffer more than this from one process. A 6s segment is ~2-10MB. */
 const MAX_OUTPUT_BYTES = 192 * 1024 * 1024;
 
-let running = 0;
-const waiting: (() => void)[] = [];
+/**
+ * Read-ahead may use every slot but one.
+ *
+ * Without this, a player that asks for a segment nobody predicted — after a
+ * seek, say — queues behind four background jobs and waits seconds for work
+ * that takes one. Leaving a slot free means an unpredicted request starts
+ * almost immediately, which matters far more than filling the cache a little
+ * sooner.
+ */
+const MAX_BACKGROUND = Math.max(1, MAX_CONCURRENT - 1);
 
-async function acquire(): Promise<() => void> {
-  if (running >= MAX_CONCURRENT) {
-    await new Promise<void>((resolve) => waiting.push(resolve));
+export type Priority = 'interactive' | 'background';
+
+let running = 0;
+let background = 0;
+const waiting: Array<{ priority: Priority; resume: () => void }> = [];
+
+function canStart(priority: Priority): boolean {
+  if (running >= MAX_CONCURRENT) return false;
+  return priority === 'interactive' || background < MAX_BACKGROUND;
+}
+
+/** Wake the longest-waiting job that is allowed to run, interactive first. */
+function pump(): void {
+  for (const priority of ['interactive', 'background'] as const) {
+    const index = waiting.findIndex((w) => w.priority === priority);
+    if (index === -1 || !canStart(priority)) continue;
+    const [next] = waiting.splice(index, 1);
+    next?.resume();
+    return;
+  }
+}
+
+async function acquire(priority: Priority): Promise<() => void> {
+  if (!canStart(priority)) {
+    await new Promise<void>((resume) => waiting.push({ priority, resume }));
   }
   running++;
+  if (priority === 'background') background++;
+
   let released = false;
   return () => {
     if (released) return;
     released = true;
     running--;
-    waiting.shift()?.();
+    if (priority === 'background') background--;
+    pump();
   };
 }
 
@@ -103,8 +138,12 @@ function capture(bin: string, args: string[]): Promise<Buffer> {
 }
 
 /** Run a process under the concurrency limit. */
-async function captureLimited(bin: string, args: string[]): Promise<Buffer> {
-  const release = await acquire();
+async function captureLimited(
+  bin: string,
+  args: string[],
+  priority: Priority = 'interactive'
+): Promise<Buffer> {
+  const release = await acquire(priority);
   try {
     return await capture(bin, args);
   } finally {
@@ -254,7 +293,8 @@ export async function mediaSegment(
   path: string,
   plan: PlayPlan,
   segment: Segment,
-  key: string
+  key: string,
+  priority: Priority = 'interactive'
 ): Promise<Buffer> {
   // The init segment carries the track timescales, and is cached after the
   // first request, so this is a map lookup for every segment but the first.
@@ -262,7 +302,8 @@ export async function mediaSegment(
 
   const output = await captureLimited(
     'ffmpeg',
-    mediaSegmentArgs(path, plan, segment, await h264Encoder())
+    mediaSegmentArgs(path, plan, segment, await h264Encoder()),
+    priority
   );
   const { media } = splitFragmentedMp4(output);
   if (media.length === 0) {
