@@ -80,9 +80,23 @@ export function Player({
         // transcoder starting up rather than a dead connection.
         manifestLoadingTimeOut: 30_000,
         fragLoadingTimeOut: 60_000,
-        // Enough lookahead to ride out one slow segment without spending the
-        // whole episode's CPU up front.
-        maxBufferLength: 30
+
+        // Buffer far ahead. The defaults are tuned for streaming over the
+        // internet, where being greedy wastes someone's bandwidth cap — but
+        // the server here is on the same machine or the same LAN, and the
+        // thing actually worth hiding is the second it takes to transcode a
+        // segment. Holding 30s meant five segments of slack and a stall on
+        // any hiccup; holding minutes means the transcoder stays comfortably
+        // ahead of playback and seeking lands in already-fetched video.
+        maxBufferLength: 120,
+        maxMaxBufferLength: 600,
+        // The length caps above are only advisory until this one allows it:
+        // at 1080p these segments run ~3MB each, and the 60MB default would
+        // have capped the buffer at two minutes regardless.
+        maxBufferSize: 400 * 1000 * 1000,
+        // Keep a little behind for instant short rewinds, but not the whole
+        // episode — that is memory in the tab for video nobody will rewatch.
+        backBufferLength: 120
       });
       instance.on(Hls.Events.ERROR, (_event, data) => {
         if (!data.fatal) return;
